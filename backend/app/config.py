@@ -1,0 +1,63 @@
+"""Application settings, loaded from environment variables and backend/.env."""
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/ folder, so .env is found no matter which directory you run from.
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # NCBI E-utilities (PubMed)
+    ncbi_api_key: str | None = None
+    ncbi_email: str | None = None
+    ncbi_tool: str = "healthcare-research-agent"
+    ncbi_base_url: str = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    ncbi_timeout_seconds: float = Field(default=15.0, gt=0)
+    # Retries after a timeout, HTTP 429, or HTTP 5xx (0 = no retries).
+    ncbi_max_retries: int = Field(default=2, ge=0, le=5)
+    ncbi_retry_backoff_seconds: float = Field(default=1.0, ge=0)
+    # None = NCBI's published limit: 10/s with an API key, 3/s without.
+    ncbi_requests_per_second: float | None = Field(default=None, gt=0)
+
+    # Search result limits (the max_results query parameter)
+    search_default_results: int = Field(default=20, ge=1)
+    search_min_results: int = Field(default=1, ge=1)
+    search_max_results: int = Field(default=100, ge=1)
+    # Fetch more candidates than requested so re-ranking, dedup and date
+    # filtering still leave enough papers. Capped to keep EFetch requests small.
+    search_candidate_multiplier: int = Field(default=3, ge=1, le=10)
+    search_max_candidates: int = Field(default=200, ge=1, le=500)
+
+    # Relevance ranking: a title match counts this much more than an abstract match.
+    ranking_title_weight: float = Field(default=3.0, ge=0)
+    ranking_abstract_weight: float = Field(default=1.0, ge=0)
+
+    # Browser origins allowed to call this API.
+    # Development: any http://localhost:<port> / 127.0.0.1:<port> is allowed, so the
+    # frontend works even if Next.js picks another port. Turn this off in production.
+    cors_allow_local_origins: bool = True
+    # Exact extra origins, e.g. a deployed frontend. In .env, write it as JSON:
+    # CORS_ORIGINS=["https://research.example.org"]
+    cors_origins: list[str] = []
+
+    @property
+    def effective_requests_per_second(self) -> float:
+        if self.ncbi_requests_per_second is not None:
+            return self.ncbi_requests_per_second
+        return 10.0 if self.ncbi_api_key else 3.0
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return one shared Settings instance (read from the environment once)."""
+    return Settings()

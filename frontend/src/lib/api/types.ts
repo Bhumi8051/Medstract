@@ -132,3 +132,40 @@ export interface PaperAnalysis {
   grounding_warnings: string[];
   report: PaperReport;
 }
+
+// ---------- Accounts, preferences and saved searches (backend Milestone 5) ----------
+
+export interface User {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+export interface Preferences {
+  summary_level: SummaryLevel;
+  research_interests: string[];
+}
+
+export interface Account {
+  user: User;
+  preferences: Preferences;
+}
+
+/** Filters stored with a saved search (backend `SavedSearchFilters`, snake_case). */
+export interface SavedSearchFilters {
+  period: Period;
+  start_date: string | null;
+  end_date: string | null;
+  include_undated: boolean;
+  article_types: ArticleType[];
+  languages: Language[];
+  max_results: number;
+}
+
+export interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  filters: SavedSearchFilters;
+  created_at: string;
+}

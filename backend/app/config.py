@@ -2,8 +2,9 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ folder, so .env is found no matter which directory you run from.
@@ -58,6 +59,28 @@ class Settings(BaseSettings):
     # Exact extra origins, e.g. a deployed frontend. In .env, write it as JSON:
     # CORS_ORIGINS=["https://research.example.org"]
     cors_origins: list[str] = []
+
+    # PostgreSQL (accounts, preferences, saved searches). SecretStr because a
+    # production URL usually contains a password. Format:
+    # postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
+    database_url: SecretStr = SecretStr("postgresql+asyncpg://localhost/healthcare_research")
+
+    # Login sessions (HttpOnly cookie holding a random token; only its hash is stored).
+    session_cookie_name: str = "hria_session"
+    session_ttl_days: int = Field(default=14, ge=1, le=90)
+    # Must be true in production (HTTPS). False locally because http://localhost has no TLS.
+    session_cookie_secure: bool = False
+    session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
+    # Slow down password guessing: failed logins allowed per email per window.
+    login_max_failures: int = Field(default=5, ge=1, le=100)
+    login_failure_window_seconds: int = Field(default=900, ge=10)
+
+    @model_validator(mode="after")
+    def _samesite_none_requires_secure(self) -> "Settings":
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError("SESSION_COOKIE_SAMESITE=none requires SESSION_COOKIE_SECURE=true")
+        return self
 
     @property
     def gemini_key_value(self) -> str | None:

@@ -5,7 +5,16 @@
  * only ever hold a public URL. API keys (NCBI, Gemini) stay in backend/.env.
  */
 
-import type { PaperAnalysis, SearchParams, SearchResponse, SummaryLevel } from "./types";
+import type {
+  Account,
+  PaperAnalysis,
+  Preferences,
+  SavedSearch,
+  SavedSearchFilters,
+  SearchParams,
+  SearchResponse,
+  SummaryLevel,
+} from "./types";
 
 // This project's backend runs on port 8010 (see README.md); NEXT_PUBLIC_API_URL overrides it.
 const DEFAULT_API_URL = "http://localhost:8010";
@@ -16,6 +25,10 @@ export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL)
 const SEARCH_TIMEOUT_MS = 45_000;
 // The backend waits up to ~65 s for Gemini; allow for that plus the PubMed fetch.
 const ANALYSIS_TIMEOUT_MS = 90_000;
+const ACCOUNT_TIMEOUT_MS = 15_000;
+
+// The backend rejects cookie-authenticated changes without this header (CSRF defence).
+const CSRF_HEADERS = { "X-Requested-With": "fetch" };
 
 export type ApiErrorKind = "network" | "timeout" | "http" | "invalid_response";
 
@@ -65,8 +78,18 @@ function detailToMessage(detail: unknown): string | null {
   return null;
 }
 
+const ACCOUNT_STATUS_MESSAGES: Record<number, string> = {
+  401: "Please log in to continue.",
+  403: "This request was blocked for security reasons. Please reload the page and try again.",
+  404: "That item no longer exists.",
+  409: "That conflicts with existing data.",
+  422: "Some details are invalid. Please check them and try again.",
+  429: "Too many attempts. Please wait a few minutes and try again.",
+  503: "Accounts are temporarily unavailable. Search and paper analysis still work.",
+};
+
 interface RequestOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   query?: URLSearchParams;
   body?: unknown;
   timeoutMs: number;
@@ -78,14 +101,18 @@ async function requestJson(path: string, options: RequestOptions, signal?: Abort
   const url = `${API_BASE_URL}${path}${options.query ? `?${options.query.toString()}` : ""}`;
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const method = options.method ?? "GET";
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (method !== "GET") Object.assign(headers, CSRF_HEADERS);
 
   let response: Response;
   try {
     response = await fetch(url, {
-      method: options.method ?? "GET",
+      method,
       headers,
+      // Send and receive the HttpOnly session cookie. JavaScript never sees its value.
+      credentials: "include",
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: combined,
     });
@@ -102,6 +129,8 @@ async function requestJson(path: string, options: RequestOptions, signal?: Abort
       `The backend's CORS settings do not allow ${origin}. Check CORS_ORIGINS and CORS_ALLOW_LOCAL_ORIGINS in backend/.env.`,
     ]);
   }
+
+  if (response.status === 204) return null;
 
   let body: unknown = null;
   try {
@@ -231,4 +260,64 @@ export async function analyzePaper(
     throw new ApiError("The AI analysis came back in an unexpected format.", "invalid_response", 200);
   }
   return data;
+}
+
+// ---------- accounts ----------
+
+const accountOptions = (method: RequestOptions["method"], body?: unknown): RequestOptions => ({
+  method,
+  body,
+  timeoutMs: ACCOUNT_TIMEOUT_MS,
+  timeoutMessage: "The server took too long to respond. Please try again.",
+  statusMessages: ACCOUNT_STATUS_MESSAGES,
+});
+
+/** The logged-in account, or null when not logged in. */
+export async function getCurrentAccount(signal?: AbortSignal): Promise<Account | null> {
+  try {
+    return (await requestJson("/api/auth/me", accountOptions("GET"), signal)) as Account;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null;
+    throw error;
+  }
+}
+
+export async function register(email: string, password: string): Promise<Account> {
+  return (await requestJson("/api/auth/register", accountOptions("POST", { email, password }))) as Account;
+}
+
+export async function login(email: string, password: string): Promise<Account> {
+  return (await requestJson("/api/auth/login", accountOptions("POST", { email, password }))) as Account;
+}
+
+export async function logout(): Promise<void> {
+  await requestJson("/api/auth/logout", accountOptions("POST"));
+}
+
+export async function updatePreferences(preferences: Preferences): Promise<Preferences> {
+  return (await requestJson("/api/me/preferences", accountOptions("PUT", preferences))) as Preferences;
+}
+
+export async function listSavedSearches(signal?: AbortSignal): Promise<SavedSearch[]> {
+  return (await requestJson("/api/saved-searches", accountOptions("GET"), signal)) as SavedSearch[];
+}
+
+export async function getSavedSearch(id: string, signal?: AbortSignal): Promise<SavedSearch> {
+  return (await requestJson(
+    `/api/saved-searches/${encodeURIComponent(id)}`,
+    accountOptions("GET"),
+    signal,
+  )) as SavedSearch;
+}
+
+export async function createSavedSearch(input: {
+  name: string;
+  query: string;
+  filters: SavedSearchFilters;
+}): Promise<SavedSearch> {
+  return (await requestJson("/api/saved-searches", accountOptions("POST", input))) as SavedSearch;
+}
+
+export async function deleteSavedSearch(id: string): Promise<void> {
+  await requestJson(`/api/saved-searches/${encodeURIComponent(id)}`, accountOptions("DELETE"));
 }

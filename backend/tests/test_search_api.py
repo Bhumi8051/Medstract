@@ -293,11 +293,32 @@ def test_cors_production_allows_only_configured_origins():
     assert _allowed_origin(client, "https://other.example.org") is None
 
 
-def test_cors_only_allows_get():
+@pytest.mark.parametrize(("method", "allowed"), [("GET", True), ("POST", True), ("PUT", True), ("DELETE", True), ("PATCH", False)])
+def test_cors_allows_only_the_api_methods(method, allowed):
     client = _cors_app()
     preflight = client.options(
         "/ping",
-        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "DELETE"},
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": method},
+    )
+    assert (preflight.status_code == 200) is allowed
+
+
+def test_cors_allows_credentials_for_listed_origins_only():
+    client = _cors_app()
+    allowed = client.get("/ping", headers={"Origin": "http://localhost:3000"})
+    assert allowed.headers.get("access-control-allow-credentials") == "true"
+    assert allowed.headers.get("access-control-allow-origin") == "http://localhost:3000"  # never "*"
+    assert "access-control-allow-origin" not in client.get("/ping", headers={"Origin": "http://evil.example"}).headers
+
+
+def test_cors_rejects_unexpected_request_headers():
+    preflight = _cors_app().options(
+        "/ping",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "x-evil-header",
+        },
     )
     assert preflight.status_code == 400
 

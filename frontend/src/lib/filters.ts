@@ -6,7 +6,7 @@
  * future "saved searches" feature can store it as-is.
  */
 
-import type { ArticleType, Language, Period, SearchParams, SummaryLevel } from "./api/types";
+import type { ArticleType, Language, Period, SavedSearchFilters, SearchParams, SummaryLevel } from "./api/types";
 
 export type { SummaryLevel };
 
@@ -84,6 +84,43 @@ export function toSearchParams(query: string, filters: SearchFilters): SearchPar
     languages: filters.languages,
     maxResults: filters.maxResults,
   };
+}
+
+/** Convert to the backend's saved-search format (snake_case). */
+export function toSavedFilters(filters: SearchFilters): SavedSearchFilters {
+  return {
+    period: filters.period,
+    start_date: filters.startDate || null,
+    end_date: filters.endDate || null,
+    include_undated: filters.includeUndated,
+    article_types: filters.articleTypes,
+    languages: filters.languages,
+    max_results: filters.maxResults,
+  };
+}
+
+/** Convert a saved search's filters back to the UI's format. */
+export function fromSavedFilters(saved: SavedSearchFilters): SearchFilters {
+  return {
+    period: saved.period,
+    startDate: saved.start_date ?? "",
+    endDate: saved.end_date ?? "",
+    includeUndated: saved.include_undated,
+    articleTypes: saved.article_types,
+    languages: saved.languages,
+    maxResults: saved.max_results,
+  };
+}
+
+/** Short human-readable labels for a saved search's filters, e.g. ["Past Month", "Review", "50 results"]. */
+export function describeFilters(filters: SearchFilters): string[] {
+  const labels: string[] = [];
+  if (filters.period !== "all") labels.push(labelFor(PERIOD_OPTIONS, filters.period));
+  if (filters.startDate || filters.endDate) labels.push(`${filters.startDate || "Any"} – ${filters.endDate || "Today"}`);
+  labels.push(...filters.articleTypes.map((t) => labelFor(ARTICLE_TYPE_OPTIONS, t)));
+  labels.push(...filters.languages.map((l) => labelFor(LANGUAGE_OPTIONS, l)));
+  if (filters.maxResults !== DEFAULT_FILTERS.maxResults) labels.push(`${filters.maxResults} results`);
+  return labels;
 }
 
 /** Number of filters that differ from the defaults (for the "Filters (n)" badge). */

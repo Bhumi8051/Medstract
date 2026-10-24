@@ -126,3 +126,88 @@ def pubmed_handler(esearch: dict, efetch: str) -> Handler:
 def make_client(handler: Handler, settings: Settings | None = None) -> PubMedClient:
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return PubMedClient(settings or make_settings(), http_client)
+
+
+# ---------- PostgreSQL fixtures (accounts, preferences, saved searches) ----------
+
+import asyncio  # noqa: E402
+import os  # noqa: E402
+
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
+from sqlalchemy.pool import NullPool  # noqa: E402
+
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://localhost/healthcare_research_test"
+)
+ACCOUNT_TABLES = "users, user_sessions, research_preferences, saved_searches"
+
+
+def run_db(statement: str, params: dict | None = None, url: str = TEST_DATABASE_URL):
+    """Run one SQL statement against the test database and return all rows."""
+
+    async def _run():
+        engine = create_async_engine(url, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                result = await conn.execute(text(statement), params or {})
+                return result.fetchall() if result.returns_rows else []
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_run())
+
+
+def alembic_config(url: str):
+    from alembic.config import Config
+
+    from app.config import BACKEND_DIR
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.attributes["database_url"] = url
+    config.attributes["configure_logger"] = False
+    return config
+
+
+@pytest.fixture(scope="session")
+def migrated_test_db() -> str:
+    """Bring the test database to the latest migration (once per test run)."""
+    from alembic import command
+
+    db_name = TEST_DATABASE_URL.rsplit("/", 1)[-1]
+    if not db_name.endswith("_test"):
+        pytest.fail(f"Refusing to run database tests against '{db_name}': its name must end in _test.")
+    try:
+        run_db("SELECT 1")
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(
+            f"PostgreSQL test database not reachable ({type(exc).__name__}). "
+            "Start PostgreSQL and run: createdb healthcare_research_test"
+        )
+    command.upgrade(alembic_config(TEST_DATABASE_URL), "head")
+    return TEST_DATABASE_URL
+
+
+@pytest.fixture
+def db_client(migrated_test_db):
+    """A TestClient using the real app with the test database. Tables are emptied first."""
+    from fastapi.testclient import TestClient
+
+    from app.db import create_sessionmaker
+    from app.main import app
+    from app.services.auth import LoginThrottle
+
+    run_db(f"TRUNCATE {ACCOUNT_TABLES} RESTART IDENTITY CASCADE")
+    engine = create_async_engine(migrated_test_db, poolclass=NullPool)
+    saved = {k: getattr(app.state, k, None) for k in ("db_sessionmaker", "login_throttle")}
+    app.state.db_sessionmaker = create_sessionmaker(engine)
+    app.state.login_throttle = LoginThrottle(max_failures=5, window_seconds=900)
+
+    client = TestClient(app, base_url="http://localhost")
+    client.headers.update({"X-Requested-With": "fetch"})  # what the frontend sends
+    yield client
+
+    client.close()
+    for key, value in saved.items():
+        setattr(app.state, key, value)
+    asyncio.run(engine.dispose())

@@ -1,8 +1,11 @@
 """Pydantic models describing the data our API accepts and returns."""
 
+import uuid
+from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
 # Used when a PubMed record has no title; ranking and dedup ignore it.
 NO_TITLE_PLACEHOLDER = "[No title available]"
@@ -183,3 +186,107 @@ class PaperAnalysis(BaseModel):
         description="Automatic checks that flagged content not found in the PubMed record.",
     )
     report: GeneratedReport
+
+
+# ---------- Accounts, preferences and saved searches (Milestone 5) ----------
+
+PASSWORD_MIN_LENGTH = 10
+PASSWORD_MAX_LENGTH = 128  # bounds hashing cost; long passphrases are still welcome
+MAX_RESEARCH_INTERESTS = 20
+MAX_SAVED_SEARCHES_PER_USER = 100
+
+
+class RegisterRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    email: EmailStr
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+
+
+class LoginRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
+
+
+class UserOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    created_at: datetime
+
+
+ResearchInterest = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
+
+
+class PreferencesIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    summary_level: SummaryLevel
+    research_interests: list[ResearchInterest] = Field(default_factory=list, max_length=MAX_RESEARCH_INTERESTS)
+
+    @field_validator("research_interests")
+    @classmethod
+    def _dedupe_interests(cls, interests: list[str]) -> list[str]:
+        """Collapse inner whitespace and drop case-insensitive duplicates, keeping order."""
+        seen: set[str] = set()
+        unique = []
+        for interest in (" ".join(i.split()) for i in interests):
+            if interest.lower() not in seen:
+                seen.add(interest.lower())
+                unique.append(interest)
+        return unique
+
+
+class PreferencesOut(BaseModel):
+    summary_level: SummaryLevel
+    research_interests: list[str]
+
+
+class AccountOut(BaseModel):
+    user: UserOut
+    preferences: PreferencesOut
+
+
+class SavedSearchFilters(BaseModel):
+    """The search filters stored with a saved search; same values /api/search accepts."""
+
+    model_config = {"extra": "forbid"}
+
+    period: Period = Period.ALL
+    start_date: str | None = Field(default=None, max_length=10)
+    end_date: str | None = Field(default=None, max_length=10)
+    include_undated: bool = False
+    article_types: list[ArticleType] = Field(default_factory=list, max_length=len(ArticleType))
+    languages: list[Language] = Field(default_factory=list, max_length=len(Language))
+    max_results: int = Field(default=20, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _check_dates(self) -> "SavedSearchFilters":
+        from app.services.dates import parse_date_bound  # local import: dates.py imports this module
+
+        self.start_date = self.start_date.strip() if self.start_date and self.start_date.strip() else None
+        self.end_date = self.end_date.strip() if self.end_date and self.end_date.strip() else None
+        start = parse_date_bound(self.start_date, is_end=False) if self.start_date else None
+        end = parse_date_bound(self.end_date, is_end=True) if self.end_date else None
+        if start and end and start > end:
+            raise ValueError("start_date must be on or before end_date.")
+        self.article_types = list(dict.fromkeys(self.article_types))
+        self.languages = list(dict.fromkeys(self.languages))
+        return self
+
+
+class SavedSearchCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)] = ""
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=500)]
+    filters: SavedSearchFilters = Field(default_factory=SavedSearchFilters)
+
+
+class SavedSearchOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    query: str
+    filters: SavedSearchFilters
+    created_at: datetime

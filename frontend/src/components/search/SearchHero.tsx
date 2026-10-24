@@ -19,6 +19,9 @@ interface SearchHeroProps {
   onPeriodChange: (period: Period) => void;
   /** Smaller layout once results are showing. */
   compact: boolean;
+  /** The signed-in user's research interests, offered as one-click searches. */
+  interests?: string[];
+  onInterestSelect?: (interest: string) => void;
 }
 
 export function SearchHero({
@@ -32,6 +35,8 @@ export function SearchHero({
   period,
   onPeriodChange,
   compact,
+  interests = [],
+  onInterestSelect,
 }: SearchHeroProps) {
   const inputId = useId();
   const errorId = `${inputId}-error`;
@@ -106,6 +111,23 @@ export function SearchHero({
           </p>
         )}
       </form>
+
+      {interests.length > 0 && onInterestSelect && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
+          <span className="text-slate-500 dark:text-slate-400">Your interests:</span>
+          {interests.map((interest) => (
+            <button
+              key={interest}
+              type="button"
+              disabled={isLoading}
+              onClick={() => onInterestSelect(interest)}
+              className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-teal-900 transition hover:border-teal-500 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none disabled:opacity-60 dark:border-teal-900 dark:bg-teal-950 dark:text-teal-200"
+            >
+              {interest}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-start justify-center gap-x-8 gap-y-4 text-left">
         <SegmentedControl

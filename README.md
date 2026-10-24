@@ -2,14 +2,20 @@
 
 Search, filter and rank biomedical papers from **PubMed** (the only literature source).
 
+For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt).
+
 - **Backend:** Python, FastAPI and Pydantic, in `backend/`. It calls NCBI E-utilities (ESearch and EFetch).
+- **AI analysis:** Google Gemini, on demand per paper, grounded in the PubMed abstract.
+- **Accounts:** PostgreSQL (SQLAlchemy and Alembic) for users, research preferences and saved searches.
 - **Frontend:** Next.js App Router, TypeScript and Tailwind CSS, in `frontend/`.
 
 ## Prerequisites
 
 - Python 3.12+
 - Node.js 20.9+ and npm (required by Next.js 16)
+- PostgreSQL 14+ running locally (on macOS: `brew install postgresql@14 && brew services start postgresql@14`)
 - macOS or Linux shell (for `./dev.sh`)
+- Optional: a free [Gemini API key](https://aistudio.google.com/apikey) for AI paper analysis
 - Optional: a free [NCBI API key](https://account.ncbi.nlm.nih.gov/settings/) under "API Key Management". It raises PubMed's limit from 3 to 10 requests per second.
 
 ## Setup (once)
@@ -20,6 +26,11 @@ cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env          # then edit .env (see below)
+
+# Databases (app + tests) and schema
+createdb healthcare_research
+createdb healthcare_research_test
+.venv/bin/alembic upgrade head   # creates/updates the tables; rerun after pulling new migrations
 
 # Frontend
 cd ../frontend
@@ -36,11 +47,26 @@ Real values live in `backend/.env` and `frontend/.env.local`. Git ignores both. 
 | `backend/.env` | `NCBI_API_KEY` | Optional NCBI key. **Secret: keep it in this file only.** |
 | `backend/.env` | `NCBI_EMAIL` | Contact email NCBI asks every app to send |
 | `backend/.env` | `NCBI_TOOL` | App name sent to NCBI (default `healthcare-research-agent`) |
+| `backend/.env` | `GEMINI_API_KEY` | Enables AI paper analysis. **Secret.** Without it, search still works and analysis returns a clear error |
+| `backend/.env` | `GEMINI_MODEL` | Gemini model ID (default `gemini-3.5-flash-lite`) |
+| `backend/.env` | `DATABASE_URL` | PostgreSQL URL (default `postgresql+asyncpg://localhost/healthcare_research`). **Secret if it contains a password** |
+| `backend/.env` | `TEST_DATABASE_URL` | Database the tests use (default `…/healthcare_research_test`). Its name must end in `_test`, because tests empty its tables |
+| `backend/.env` | `SESSION_COOKIE_SECURE` | `false` locally. **Set to `true` in production** (HTTPS) |
 | `backend/.env` | `CORS_ALLOW_LOCAL_ORIGINS` | `true` by default: lets any `localhost`/`127.0.0.1` port call the API. Set to `false` in production |
 | `backend/.env` | `CORS_ORIGINS` | Exact allowed origins for production, as JSON, e.g. `["https://research.example.org"]` |
 | `frontend/.env.local` | `NEXT_PUBLIC_API_URL` | Backend URL (default `http://localhost:8010`). It is visible in the browser, so **never put secrets here** |
 
-`backend/.env.example` lists the optional tuning settings: timeouts, retries, result limits and ranking weights.
+`backend/.env.example` lists every optional setting: timeouts, retries, result limits, ranking weights, session lifetime and login throttling.
+
+## Accounts and security
+
+- **Optional.** Search and paper analysis work without logging in. An account adds saved searches, a default summary level, and research interests, which show up as one-click searches.
+- **Passwords** are hashed with Argon2id; plain-text passwords are never stored or logged. Passwords must be 10–128 characters.
+- **Sessions** use a random token in an HttpOnly, `SameSite=Lax` cookie, which JavaScript can't read. The database stores only a SHA-256 hash of the token. Sessions expire after 14 days, and logging out deletes them on the server.
+- **CSRF protection:** requests that change data must send an `X-Requested-With: fetch` header. The browser only lets the allowed origins send it.
+- **Password-guessing protection:** after 5 failed logins for an email within 15 minutes, further attempts are refused for a while. This counter lives in memory, so it resets when the backend restarts.
+- **Users only see their own data.** Another user's saved search answers 404. Deleting a user removes all of their data.
+- **Schema changes go through Alembic.** After changing `app/db_models.py`, run `.venv/bin/alembic revision --autogenerate -m "describe change"`, review the generated file, then run `.venv/bin/alembic upgrade head`. A test fails if the models and migrations drift apart.
 
 ## Run
 
@@ -66,7 +92,7 @@ cd frontend && npm run dev
 ## Checks
 
 ```bash
-cd backend && .venv/bin/python -m pytest
+cd backend && .venv/bin/python -m pytest      # needs PostgreSQL running (uses healthcare_research_test)
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
 
@@ -81,8 +107,11 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 - **Changed `.env` or `.env.local` but nothing happened.** Restart the server. `--reload` only watches `.py` files, and Next.js reads `NEXT_PUBLIC_*` values when it starts.
 - **PubMed error 429 / "rate limit".** Add an `NCBI_API_KEY`, or wait a moment. The backend already retries with backoff.
 - **"API key invalid".** Re-copy the key into `backend/.env` with no quotes or spaces, then restart the backend.
+- **"Accounts are temporarily unavailable…" (503).** Either PostgreSQL isn't running (`pg_isready`; start it with `brew services start postgresql@14`), or the tables are missing or out of date (`cd backend && .venv/bin/alembic upgrade head`). Search and analysis keep working either way.
+- **Login seems to work, but you're logged out again right away.** Open the app at `http://localhost:3000`, not `http://127.0.0.1:3000`. The session cookie belongs to `localhost`, so the browser and the API must both use `localhost`.
+- **Database tests are skipped.** PostgreSQL isn't reachable, or `healthcare_research_test` doesn't exist (`createdb healthcare_research_test`).
 - **Few results for "Past Week".** Recent papers can take a few days to appear in PubMed's date index.
 
 ## Not yet implemented
 
-AI summaries (Gemini), accounts and login, saved searches, and weekly email digests. The Login button and the summary-level selector are placeholders for these.
+Weekly email digests, password reset, email verification, and changing or deleting an account from the UI.

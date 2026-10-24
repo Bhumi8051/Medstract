@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorAlert } from "@/components/feedback/ErrorAlert";
 import { LoadingResults } from "@/components/feedback/LoadingResults";
@@ -9,12 +11,14 @@ import { FilterSidebar } from "@/components/filters/FilterSidebar";
 import { ActiveFilterChips } from "@/components/results/ActiveFilterChips";
 import { PaperList } from "@/components/results/PaperList";
 import { ResultsSummary } from "@/components/results/ResultsSummary";
-import { ApiError, searchPapers } from "@/lib/api/client";
+import { SaveSearchButton } from "@/components/saved/SaveSearchButton";
+import { ApiError, getSavedSearch, searchPapers } from "@/lib/api/client";
 import type { SearchResponse } from "@/lib/api/types";
 import {
   countActiveFilters,
   DEFAULT_FILTERS,
   DEFAULT_SUMMARY_LEVEL,
+  fromSavedFilters,
   toSearchParams,
   type SearchFilters,
   type SummaryLevel,
@@ -34,6 +38,9 @@ type SearchState =
  * Owns the search: the typed query, the filters, the summary level and the
  * request lifecycle. Results always reflect `submittedQuery` + `filters`:
  * changing any filter after a search immediately re-runs it.
+ *
+ * Signed-in extras: the preferred summary level is applied on login, saved
+ * searches open via `/?saved=<id>`, and research interests become quick searches.
  */
 export function ResearchSearch() {
   const [query, setQuery] = useState("");
@@ -45,6 +52,22 @@ export function ResearchSearch() {
   const [state, setState] = useState<SearchState>({ status: "idle" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
+  const { status: authStatus, account, openAuthDialog } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const savedId = searchParams.get("saved");
+  const handledSavedIdRef = useRef<string | null>(null);
+
+  // Apply the account's preferred summary level on login and whenever the saved
+  // preference changes. (Next.js keeps this page's state while you visit /account,
+  // so keying on the user alone would keep a stale level.) Adjusting state during
+  // render is React's recommended way to respond to a changed context value.
+  const preferredLevelKey = account ? `${account.user.id}:${account.preferences.summary_level}` : null;
+  const [levelAppliedFor, setLevelAppliedFor] = useState<string | null>(null);
+  if (account && preferredLevelKey !== levelAppliedFor) {
+    setLevelAppliedFor(preferredLevelKey);
+    setSummaryLevel(account.preferences.summary_level);
+  }
 
   async function runSearch(searchQuery: string, searchFilters: SearchFilters) {
     // A new search cancels any request still in flight.
@@ -86,6 +109,59 @@ export function ResearchSearch() {
     updateFilters(DEFAULT_FILTERS);
   }
 
+  function searchFor(text: string) {
+    setQuery(text);
+    setQueryError(null);
+    setSubmittedQuery(text);
+    runSearch(text, filters);
+  }
+
+  // Open a saved search from /?saved=<id> (linked from the account page).
+  useEffect(() => {
+    if (!savedId) {
+      // URL is back to "/": allow the same saved search to be opened again later.
+      handledSavedIdRef.current = null;
+      return;
+    }
+    if (handledSavedIdRef.current === savedId || authStatus === "loading") return;
+    handledSavedIdRef.current = savedId;
+    if (authStatus !== "authenticated") {
+      openAuthDialog("login", "Log in to open your saved search.");
+      handledSavedIdRef.current = null; // try again after logging in
+      return;
+    }
+    const controller = new AbortController();
+    getSavedSearch(savedId, controller.signal)
+      .then((saved) => {
+        const savedFilters = fromSavedFilters(saved.filters);
+        setQuery(saved.query);
+        setFilters(savedFilters);
+        setSubmittedQuery(saved.query);
+        runSearch(saved.query, savedFilters);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setSubmittedQuery("");
+        setState({
+          status: "error",
+          message: error instanceof ApiError ? error.message : "The saved search could not be opened.",
+          hints: [],
+        });
+      })
+      .finally(() => {
+        // Drop ?saved= from the address bar: from here on the page shows live, editable state.
+        // Skipped if this load was cancelled (another run of this effect takes over).
+        if (!controller.signal.aborted) router.replace("/", { scroll: false });
+      });
+    return () => {
+      // Cancelled before it finished (e.g. React's development double-run): let the next run load it.
+      controller.abort();
+      if (handledSavedIdRef.current === savedId) handledSavedIdRef.current = null;
+    };
+    // runSearch is recreated each render; we only want to react to the URL and login state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedId, authStatus]);
+
   const hasSearched = submittedQuery !== null;
   const activeCount = countActiveFilters(filters);
 
@@ -105,6 +181,8 @@ export function ResearchSearch() {
         period={filters.period}
         onPeriodChange={(period) => updateFilters({ period })}
         compact={hasSearched}
+        interests={account?.preferences.research_interests ?? []}
+        onInterestSelect={searchFor}
       />
 
       <p className="sr-only" aria-live="polite">
@@ -145,6 +223,14 @@ export function ResearchSearch() {
             )}
             {state.status === "success" && state.data.papers.length === 0 && (
               <EmptyState data={state.data} hasFilters={activeCount > 0} onClearFilters={clearFilters} />
+            )}
+            {state.status === "success" && submittedQuery && (
+              <SaveSearchButton
+                // New results -> fresh button (so "Saved" never refers to an older search).
+                key={`${submittedQuery}|${JSON.stringify(filters)}`}
+                query={submittedQuery}
+                filters={filters}
+              />
             )}
             {state.status === "success" && state.data.papers.length > 0 && (
               <>

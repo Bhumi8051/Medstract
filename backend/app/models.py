@@ -108,3 +108,78 @@ class SearchResponse(BaseModel):
     )
     warnings: list[str] = Field(default_factory=list)
     papers: list[Paper]
+
+
+# ---------- AI paper analysis (Milestone 4) ----------
+
+
+class SummaryLevel(StrEnum):
+    """Reading level for AI analyses (matches the frontend selector)."""
+
+    HIGH_SCHOOL = "high_school"
+    COLLEGE = "college"
+    PHD = "phd"
+
+
+class EvidenceBasis(StrEnum):
+    """Where a statement in the report comes from."""
+
+    REPORTED = "reported"  # stated in the PubMed record (title, metadata or abstract)
+    INTERPRETATION = "interpretation"  # the AI's own reading, not stated by the authors
+    NOT_REPORTED = "not_reported"  # the PubMed record does not contain this information
+
+
+class ReportPoint(BaseModel):
+    text: str = Field(description="One concise statement.")
+    basis: EvidenceBasis = Field(
+        description=(
+            "'reported' only if the statement is directly stated in the provided PubMed record; "
+            "'interpretation' for your own explanation or inference; "
+            "'not_reported' when the record does not contain the information."
+        )
+    )
+
+
+# Gemini enforces minItems/maxItems (unlike string lengths), and Pydantic re-checks them.
+MAX_POINTS = 8
+
+
+class GeneratedReport(BaseModel):
+    """The structured report Gemini must return (also sent to Gemini as the JSON schema)."""
+
+    plain_language_overview: str = Field(description="2-4 sentence overview at the requested reading level.")
+    research_question: list[ReportPoint] = Field(description="Research question or objective.", min_length=1, max_length=MAX_POINTS)
+    background: list[ReportPoint] = Field(description="Background and motivation.", min_length=1, max_length=MAX_POINTS)
+    methods: list[ReportPoint] = Field(description="Methods and study design.", min_length=1, max_length=MAX_POINTS)
+    key_findings: list[ReportPoint] = Field(description="Key findings, exactly as reported.", min_length=1, max_length=MAX_POINTS)
+    interpretation: list[ReportPoint] = Field(description="Interpretation and significance.", min_length=1, max_length=MAX_POINTS)
+    limitations: list[ReportPoint] = Field(description="Limitations and caveats.", min_length=1, max_length=MAX_POINTS)
+    not_established: list[ReportPoint] = Field(description="What the paper does not establish.", min_length=1, max_length=MAX_POINTS)
+    further_questions: list[str] = Field(
+        description="Questions for further investigation.", min_length=1, max_length=6
+    )
+
+
+class AnalyzeRequest(BaseModel):
+    """Body of POST /api/papers/{pmid}/analyze. Paper content is fetched from PubMed, never sent by the browser."""
+
+    model_config = {"extra": "forbid"}
+
+    summary_level: SummaryLevel
+
+
+class PaperAnalysis(BaseModel):
+    pmid: str
+    pubmed_url: str
+    title: str
+    summary_level: SummaryLevel
+    model: str = Field(description="Gemini model that produced the report.")
+    generated_at: str = Field(description="UTC timestamp (ISO 8601).")
+    abstract_available: bool
+    source_note: str = Field(description="What the analysis was (and was not) based on. Set by the server.")
+    disclaimer: str
+    grounding_warnings: list[str] = Field(
+        default_factory=list,
+        description="Automatic checks that flagged content not found in the PubMed record.",
+    )
+    report: GeneratedReport

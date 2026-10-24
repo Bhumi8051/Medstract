@@ -40,7 +40,7 @@ export function ResearchSearch() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
-  // Kept across searches; used for explanation depth once Gemini summaries exist.
+  // Kept across searches; sent with each "Analyze paper" request.
   const [summaryLevel, setSummaryLevel] = useState<SummaryLevel>(DEFAULT_SUMMARY_LEVEL);
   const [state, setState] = useState<SearchState>({ status: "idle" });
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -149,7 +149,7 @@ export function ResearchSearch() {
             {state.status === "success" && state.data.papers.length > 0 && (
               <>
                 <ResultsSummary data={state.data} />
-                <PaperList papers={state.data.papers} />
+                <PaperList papers={state.data.papers} summaryLevel={summaryLevel} />
               </>
             )}
           </section>

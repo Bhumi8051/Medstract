@@ -89,3 +89,46 @@ export interface SearchParams {
   articleTypes?: ArticleType[];
   languages?: Language[];
 }
+
+// ---------- AI paper analysis (backend PaperAnalysis) ----------
+
+/** Reading level for AI analyses (backend `SummaryLevel`). */
+export type SummaryLevel = "high_school" | "college" | "phd";
+
+/** Where a statement in the report comes from (backend `EvidenceBasis`). */
+export type EvidenceBasis = "reported" | "interpretation" | "not_reported";
+
+export interface ReportPoint {
+  text: string;
+  basis: EvidenceBasis;
+}
+
+export interface PaperReport {
+  plain_language_overview: string;
+  research_question: ReportPoint[];
+  background: ReportPoint[];
+  methods: ReportPoint[];
+  key_findings: ReportPoint[];
+  interpretation: ReportPoint[];
+  limitations: ReportPoint[];
+  not_established: ReportPoint[];
+  further_questions: string[];
+}
+
+export interface PaperAnalysis {
+  pmid: string;
+  pubmed_url: string;
+  title: string;
+  summary_level: SummaryLevel;
+  /** Gemini model that produced the report. */
+  model: string;
+  /** UTC ISO 8601 timestamp. */
+  generated_at: string;
+  abstract_available: boolean;
+  /** What the analysis was (and was not) based on; written by the server, not the AI. */
+  source_note: string;
+  disclaimer: string;
+  /** Automatic checks that flagged numbers or links not found in the PubMed record. */
+  grounding_warnings: string[];
+  report: PaperReport;
+}

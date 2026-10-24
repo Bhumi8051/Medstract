@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ folder, so .env is found no matter which directory you run from.
@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     ranking_title_weight: float = Field(default=3.0, ge=0)
     ranking_abstract_weight: float = Field(default=1.0, ge=0)
 
+    # Google Gemini (AI paper analysis). Leave the key unset to disable analysis;
+    # search keeps working. SecretStr keeps the key out of logs and reprs.
+    gemini_api_key: SecretStr | None = None
+    # Stable, free-tier model recommended by Google for cost-effective use
+    # (checked against ai.google.dev/gemini-api/docs/models, October 2026).
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
+    gemini_max_output_tokens: int = Field(default=8192, ge=1024, le=65536)
+
     # Browser origins allowed to call this API.
     # Development: any http://localhost:<port> / 127.0.0.1:<port> is allowed, so the
     # frontend works even if Next.js picks another port. Turn this off in production.
@@ -49,6 +58,13 @@ class Settings(BaseSettings):
     # Exact extra origins, e.g. a deployed frontend. In .env, write it as JSON:
     # CORS_ORIGINS=["https://research.example.org"]
     cors_origins: list[str] = []
+
+    @property
+    def gemini_key_value(self) -> str | None:
+        """The Gemini key, or None if unset or blank. Only pass this to the SDK."""
+        if self.gemini_api_key is None:
+            return None
+        return self.gemini_api_key.get_secret_value().strip() or None
 
     @property
     def effective_requests_per_second(self) -> float:

@@ -2,10 +2,10 @@
  * The one place the frontend talks to the FastAPI backend.
  *
  * NEXT_PUBLIC_API_URL is inlined into browser code at build time, so it must
- * only ever hold a public URL. API keys stay in backend/.env.
+ * only ever hold a public URL. API keys (NCBI, Gemini) stay in backend/.env.
  */
 
-import type { SearchParams, SearchResponse } from "./types";
+import type { PaperAnalysis, SearchParams, SearchResponse, SummaryLevel } from "./types";
 
 // This project's backend runs on port 8010 (see README.md); NEXT_PUBLIC_API_URL overrides it.
 const DEFAULT_API_URL = "http://localhost:8010";
@@ -13,7 +13,9 @@ const DEFAULT_API_URL = "http://localhost:8010";
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/+$/, "");
 
 // The backend may retry PubMed a few times before giving up, so allow some slack.
-const REQUEST_TIMEOUT_MS = 45_000;
+const SEARCH_TIMEOUT_MS = 45_000;
+// The backend waits up to ~65 s for Gemini; allow for that plus the PubMed fetch.
+const ANALYSIS_TIMEOUT_MS = 90_000;
 
 export type ApiErrorKind = "network" | "timeout" | "http" | "invalid_response";
 
@@ -30,11 +32,19 @@ export class ApiError extends Error {
   }
 }
 
-const STATUS_MESSAGES: Record<number, string> = {
+const SEARCH_STATUS_MESSAGES: Record<number, string> = {
   422: "Some search inputs are invalid. Please check them and try again.",
   429: "PubMed is receiving too many requests right now. Wait a moment and try again.",
   502: "PubMed returned an unexpected response. Please try again.",
   504: "PubMed took too long to respond. Please try again.",
+};
+
+const ANALYSIS_STATUS_MESSAGES: Record<number, string> = {
+  404: "This paper could not be found in PubMed.",
+  429: "The AI service is rate limited right now. Wait a minute and try again.",
+  502: "The AI analysis could not be completed. Please try again.",
+  503: "AI analysis is not available on the server right now.",
+  504: "The AI analysis took too long. Please try again.",
 };
 
 /** Turn FastAPI's `detail` (a string, or a list of validation errors) into readable text. */
@@ -55,18 +65,34 @@ function detailToMessage(detail: unknown): string | null {
   return null;
 }
 
-async function getJson(path: string, query: URLSearchParams, signal?: AbortSignal): Promise<unknown> {
-  const url = `${API_BASE_URL}${path}?${query.toString()}`;
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+interface RequestOptions {
+  method?: "GET" | "POST";
+  query?: URLSearchParams;
+  body?: unknown;
+  timeoutMs: number;
+  timeoutMessage: string;
+  statusMessages: Record<number, string>;
+}
+
+async function requestJson(path: string, options: RequestOptions, signal?: AbortSignal): Promise<unknown> {
+  const url = `${API_BASE_URL}${path}${options.query ? `?${options.query.toString()}` : ""}`;
+  const timeout = AbortSignal.timeout(options.timeoutMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
   let response: Response;
   try {
-    response = await fetch(url, { signal: combined, headers: { Accept: "application/json" } });
+    response = await fetch(url, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: combined,
+    });
   } catch (error) {
     if (signal?.aborted) throw error; // cancelled by the caller; not a real failure
     if (timeout.aborted) {
-      throw new ApiError("The search took too long to complete. Please try again.", "timeout");
+      throw new ApiError(options.timeoutMessage, "timeout");
     }
     // Browsers deliberately hide why a request failed, so list the usual causes.
     const origin = typeof window === "undefined" ? "this page's origin" : window.location.origin;
@@ -88,7 +114,7 @@ async function getJson(path: string, query: URLSearchParams, signal?: AbortSigna
     const detail =
       body && typeof body === "object" && "detail" in body ? detailToMessage(body.detail) : null;
     throw new ApiError(
-      detail ?? STATUS_MESSAGES[response.status] ?? `The research API returned an error (HTTP ${response.status}).`,
+      detail ?? options.statusMessages[response.status] ?? `The research API returned an error (HTTP ${response.status}).`,
       "http",
       response.status,
     );
@@ -118,6 +144,41 @@ function isSearchResponse(value: unknown): value is SearchResponse {
   );
 }
 
+const REPORT_POINT_SECTIONS = [
+  "research_question",
+  "background",
+  "methods",
+  "key_findings",
+  "interpretation",
+  "limitations",
+  "not_established",
+] as const;
+
+function isPaperAnalysis(value: unknown): value is PaperAnalysis {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  const report = v.report as Record<string, unknown> | undefined;
+  return (
+    typeof v.pmid === "string" &&
+    typeof v.pubmed_url === "string" &&
+    typeof v.source_note === "string" &&
+    Array.isArray(v.grounding_warnings) &&
+    !!report &&
+    typeof report.plain_language_overview === "string" &&
+    Array.isArray(report.further_questions) &&
+    REPORT_POINT_SECTIONS.every(
+      (section) =>
+        Array.isArray(report[section]) &&
+        (report[section] as unknown[]).every(
+          (point) =>
+            !!point &&
+            typeof (point as Record<string, unknown>).text === "string" &&
+            typeof (point as Record<string, unknown>).basis === "string",
+        ),
+    )
+  );
+}
+
 /** Search PubMed through the backend. Throws ApiError with a user-readable message on failure. */
 export async function searchPapers(params: SearchParams, signal?: AbortSignal): Promise<SearchResponse> {
   const query = new URLSearchParams({ q: params.query });
@@ -130,9 +191,44 @@ export async function searchPapers(params: SearchParams, signal?: AbortSignal): 
   for (const type of params.articleTypes ?? []) query.append("article_type", type);
   for (const language of params.languages ?? []) query.append("language", language);
 
-  const data = await getJson("/api/search", query, signal);
+  const data = await requestJson(
+    "/api/search",
+    {
+      query,
+      timeoutMs: SEARCH_TIMEOUT_MS,
+      timeoutMessage: "The search took too long to complete. Please try again.",
+      statusMessages: SEARCH_STATUS_MESSAGES,
+    },
+    signal,
+  );
   if (!isSearchResponse(data)) {
     throw new ApiError("The research API returned results in an unexpected format.", "invalid_response", 200);
+  }
+  return data;
+}
+
+/**
+ * Ask the backend to analyze one paper with Gemini. Only the PMID and reading
+ * level are sent; the backend fetches the paper itself from PubMed.
+ */
+export async function analyzePaper(
+  pmid: string,
+  summaryLevel: SummaryLevel,
+  signal?: AbortSignal,
+): Promise<PaperAnalysis> {
+  const data = await requestJson(
+    `/api/papers/${encodeURIComponent(pmid)}/analyze`,
+    {
+      method: "POST",
+      body: { summary_level: summaryLevel },
+      timeoutMs: ANALYSIS_TIMEOUT_MS,
+      timeoutMessage: "The AI analysis took too long. Please try again.",
+      statusMessages: ANALYSIS_STATUS_MESSAGES,
+    },
+    signal,
+  );
+  if (!isPaperAnalysis(data)) {
+    throw new ApiError("The AI analysis came back in an unexpected format.", "invalid_response", 200);
   }
   return data;
 }

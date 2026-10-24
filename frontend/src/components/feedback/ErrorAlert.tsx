@@ -1,17 +1,23 @@
 interface ErrorAlertProps {
+  title?: string;
   message: string;
   /** Possible causes to list under the message. */
   hints?: string[];
   onRetry?: () => void;
 }
 
-export function ErrorAlert({ message, hints = [], onRetry }: ErrorAlertProps) {
+export function ErrorAlert({
+  title = "The search could not be completed",
+  message,
+  hints = [],
+  onRetry,
+}: ErrorAlertProps) {
   return (
     <div
       role="alert"
       className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200"
     >
-      <h2 className="font-semibold">The search could not be completed</h2>
+      <h2 className="font-semibold">{title}</h2>
       <p className="mt-1 text-sm">{message}</p>
       {hints.length > 0 && (
         <>

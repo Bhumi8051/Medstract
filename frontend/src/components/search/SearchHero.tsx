@@ -113,7 +113,7 @@ export function SearchHero({
           options={SUMMARY_LEVEL_OPTIONS}
           value={summaryLevel}
           onChange={onSummaryLevelChange}
-          hint="For AI summaries, coming in a later update."
+          hint="Used when you click “Analyze paper” on a result."
         />
         <SegmentedControl
           legend="Publication period"

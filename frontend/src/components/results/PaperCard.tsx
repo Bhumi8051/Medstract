@@ -1,4 +1,5 @@
-import type { Paper } from "@/lib/api/types";
+import { PaperAnalysisPanel } from "@/components/analysis/PaperAnalysisPanel";
+import type { Paper, SummaryLevel } from "@/lib/api/types";
 import { formatPublicationDate, isRetracted, languageName } from "@/lib/format";
 
 import { AbstractText } from "./AbstractText";
@@ -12,9 +13,10 @@ const MAX_TYPE_BADGES = 3;
 interface PaperCardProps {
   paper: Paper;
   rank: number;
+  summaryLevel: SummaryLevel;
 }
 
-export function PaperCard({ paper, rank }: PaperCardProps) {
+export function PaperCard({ paper, rank, summaryLevel }: PaperCardProps) {
   const date = formatPublicationDate(paper);
   const retracted = isRetracted(paper);
   // Most results are English; only call out the language when it's something else.
@@ -118,6 +120,8 @@ export function PaperCard({ paper, rank }: PaperCardProps) {
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
       </div>
+
+      <PaperAnalysisPanel pmid={paper.pmid} summaryLevel={summaryLevel} />
     </article>
   );
 }

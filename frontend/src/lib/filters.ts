@@ -6,7 +6,9 @@
  * future "saved searches" feature can store it as-is.
  */
 
-import type { ArticleType, Language, Period, SearchParams } from "./api/types";
+import type { ArticleType, Language, Period, SearchParams, SummaryLevel } from "./api/types";
+
+export type { SummaryLevel };
 
 export interface Option<T extends string | number> {
   value: T;
@@ -105,9 +107,7 @@ export function toggleValue<T extends string>(list: T[], value: T, options: Opti
   return options.map((o) => o.value).filter((v) => next.includes(v));
 }
 
-// ---------- summary level (UI only until the Gemini milestone) ----------
-
-export type SummaryLevel = "high_school" | "college" | "phd";
+// ---------- summary level (sent with each AI analysis request) ----------
 
 export const SUMMARY_LEVEL_OPTIONS: Option<SummaryLevel>[] = [
   { value: "high_school", label: "High School" },

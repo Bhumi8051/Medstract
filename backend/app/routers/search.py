@@ -7,13 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.config import Settings, get_settings
 from app.models import ArticleType, Language, Period, SearchResponse
+from app.routers.errors import pubmed_http_error
 from app.services.dates import combine_period_and_range, parse_date_bound
-from app.services.pubmed import (
-    PubMedClient,
-    PubMedError,
-    PubMedRateLimitError,
-    PubMedTimeoutError,
-)
+from app.services.pubmed import PubMedClient, PubMedError
 from app.services.search_service import search_papers
 
 router = APIRouter(prefix="/api", tags=["search"])
@@ -109,11 +105,5 @@ async def search(
             article_types=article_type,
             languages=language,
         )
-    except PubMedTimeoutError:
-        raise HTTPException(status_code=504, detail="PubMed timed out. Please try again.")
-    except PubMedRateLimitError:
-        raise HTTPException(
-            status_code=429, detail="PubMed rate limit reached. Wait a moment and retry."
-        )
     except PubMedError as exc:
-        raise HTTPException(status_code=502, detail=f"PubMed error: {exc}")
+        raise pubmed_http_error(exc) from None

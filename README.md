@@ -1,4 +1,4 @@
-<h1 align="center">Medstract</h1>
+<img src="frontend/public/logo.svg" width="180"><img src="frontend/public/medstract.svg" width="750">
 
 <h3 align="center"><i>Medical research made readable</i></h3>
 

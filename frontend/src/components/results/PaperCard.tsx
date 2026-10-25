@@ -1,4 +1,5 @@
 import { PaperAnalysisPanel } from "@/components/analysis/PaperAnalysisPanel";
+import { SubscribeBell } from "@/components/subscriptions/SubscribeBell";
 import type { Paper, SummaryLevel } from "@/lib/api/types";
 import { formatPublicationDate, isRetracted, languageName } from "@/lib/format";
 
@@ -109,11 +110,15 @@ export function PaperCard({ paper, rank, summaryLevel }: PaperCardProps) {
           </dd>
         </div>
         </dl>
+        {/* Follow this paper's topic: prefilled with its title, which the user can broaden. */}
+        <span className="ml-auto">
+          <SubscribeBell topic={paper.title.replace(/\.$/, "")} readingLevel={summaryLevel} variant="card" />
+        </span>
         <a
           href={paper.pubmed_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto inline-flex items-center gap-1 font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300"
+          className="inline-flex items-center gap-1 font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300"
         >
           View on PubMed
           <span aria-hidden="true">↗</span>

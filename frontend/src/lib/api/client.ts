@@ -7,13 +7,19 @@
 
 import type {
   Account,
+  AiUsage,
+  Digest,
+  EmailStatus,
   PaperAnalysis,
   Preferences,
   SavedSearch,
   SavedSearchFilters,
   SearchParams,
   SearchResponse,
+  SubscriptionApi,
+  SubscriptionInput,
   SummaryLevel,
+  TestSendResult,
 } from "./types";
 
 // This project's backend runs on port 8010 (see README.md); NEXT_PUBLIC_API_URL overrides it.
@@ -26,6 +32,8 @@ const SEARCH_TIMEOUT_MS = 45_000;
 // The backend waits up to ~65 s for Gemini; allow for that plus the PubMed fetch.
 const ANALYSIS_TIMEOUT_MS = 90_000;
 const ACCOUNT_TIMEOUT_MS = 15_000;
+// A digest runs a PubMed search and a Gemini request per subscription (up to 3), plus the email.
+const DIGEST_TIMEOUT_MS = 240_000;
 
 // The backend rejects cookie-authenticated changes without this header (CSRF defence).
 const CSRF_HEADERS = { "X-Requested-With": "fetch" };
@@ -320,4 +328,71 @@ export async function createSavedSearch(input: {
 
 export async function deleteSavedSearch(id: string): Promise<void> {
   await requestJson(`/api/saved-searches/${encodeURIComponent(id)}`, accountOptions("DELETE"));
+}
+
+// ---------- research subscriptions ----------
+
+export async function listSubscriptions(signal?: AbortSignal): Promise<SubscriptionApi[]> {
+  return (await requestJson("/api/subscriptions", accountOptions("GET"), signal)) as SubscriptionApi[];
+}
+
+export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionApi> {
+  return (await requestJson("/api/subscriptions", accountOptions("POST", input))) as SubscriptionApi;
+}
+
+export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionApi> {
+  return (await requestJson(
+    `/api/subscriptions/${encodeURIComponent(id)}`,
+    accountOptions("PUT", input),
+  )) as SubscriptionApi;
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  await requestJson(`/api/subscriptions/${encodeURIComponent(id)}`, accountOptions("DELETE"));
+}
+
+/** Today's AI analysis allowance for the signed-in user. */
+export async function getAiUsage(signal?: AbortSignal): Promise<AiUsage> {
+  return (await requestJson("/api/me/ai-usage", accountOptions("GET"), signal)) as AiUsage;
+}
+
+// ---------- research digests (Step C: manual test emails) ----------
+
+const DIGEST_STATUS_MESSAGES: Record<number, string> = {
+  ...ACCOUNT_STATUS_MESSAGES,
+  403: "This email can't be sent to your address.",
+  429: "Too many test emails. Please wait and try again.",
+  502: "The digest could not be sent. Please try again.",
+  503: "Email is not available on the server right now.",
+  504: "The email service took too long. Please try again.",
+};
+
+const digestOptions = (body: unknown): RequestOptions => ({
+  method: "POST",
+  body,
+  timeoutMs: DIGEST_TIMEOUT_MS,
+  timeoutMessage: "Building the digest took too long. Please try again.",
+  statusMessages: DIGEST_STATUS_MESSAGES,
+});
+
+export async function getEmailStatus(signal?: AbortSignal): Promise<EmailStatus> {
+  return (await requestJson("/api/digests/email-status", accountOptions("GET"), signal)) as EmailStatus;
+}
+
+/** Build a digest without sending it. AI summaries use the daily allowance. */
+export async function previewDigest(subscriptionIds: string[], signal?: AbortSignal): Promise<Digest> {
+  return (await requestJson(
+    "/api/digests/preview",
+    digestOptions({ subscription_ids: subscriptionIds }),
+    signal,
+  )) as Digest;
+}
+
+/** Send ONE test digest. The server always sends it to the signed-in account's own email. */
+export async function sendTestDigest(subscriptionIds: string[], signal?: AbortSignal): Promise<TestSendResult> {
+  return (await requestJson(
+    "/api/digests/test-send",
+    digestOptions({ subscription_ids: subscriptionIds }),
+    signal,
+  )) as TestSendResult;
 }

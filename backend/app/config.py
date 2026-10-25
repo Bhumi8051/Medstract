@@ -76,6 +76,42 @@ class Settings(BaseSettings):
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_failure_window_seconds: int = Field(default=900, ge=10)
 
+    # Extra per-IP limits (Step B). These counters live in memory: fine for this
+    # single-process development setup, but NOT shared between multiple workers or
+    # servers, and reset on restart. Use a shared store (e.g. Redis/PostgreSQL) if
+    # the backend is ever run with several workers.
+    login_ip_max_failures: int = Field(default=20, ge=1, le=1000)
+    login_ip_window_seconds: int = Field(default=900, ge=10)
+    register_ip_max_attempts: int = Field(default=5, ge=1, le=1000)
+    register_ip_window_seconds: int = Field(default=3600, ge=10)
+    # Only read X-Forwarded-For when the app sits behind a proxy you control;
+    # otherwise any client could spoof its IP and dodge the limits above.
+    trust_proxy_headers: bool = False
+
+    # Gemini usage caps, enforced atomically in PostgreSQL (ai_usage_daily tables).
+    # Days are UTC. Only successful analyses count; failures are refunded.
+    ai_daily_limit_per_user: int = Field(default=20, ge=1, le=10_000)
+    # All users together; protects the project's free-tier quota. 0 = no overall cap.
+    ai_daily_limit_total: int = Field(default=200, ge=0, le=1_000_000)
+    # Short-term brake against rapid clicking (in memory, per user).
+    ai_burst_per_minute: int = Field(default=5, ge=1, le=600)
+
+    # Email (Step C: manual test digests only; nothing is sent automatically).
+    # Resend API key; SecretStr keeps it out of logs and reprs.
+    resend_api_key: SecretStr | None = None
+    resend_api_url: str = "https://api.resend.com"
+    # Master switch: no email is ever sent unless this is true.
+    email_enabled: bool = False
+    # onboarding@resend.dev is Resend's test sender: it only delivers to the address
+    # that owns the Resend account. Sending to anyone else needs a verified domain.
+    email_from: str = "Healthcare Research Agent <onboarding@resend.dev>"
+    # Comma-separated addresses allowed to receive test digests. Accounts aren't
+    # email-verified, so the account email alone isn't proof of ownership.
+    email_test_recipients: str = ""
+    # Test sends per user per hour (in memory, like the login limits above).
+    email_test_sends_per_hour: int = Field(default=5, ge=1, le=100)
+    email_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+
     @model_validator(mode="after")
     def _samesite_none_requires_secure(self) -> "Settings":
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
@@ -88,6 +124,18 @@ class Settings(BaseSettings):
         if self.gemini_api_key is None:
             return None
         return self.gemini_api_key.get_secret_value().strip() or None
+
+    @property
+    def resend_key_value(self) -> str | None:
+        """The Resend key, or None if unset or blank. Only pass this to the email service."""
+        if self.resend_api_key is None:
+            return None
+        return self.resend_api_key.get_secret_value().strip() or None
+
+    @property
+    def email_test_recipient_set(self) -> frozenset[str]:
+        """EMAIL_TEST_RECIPIENTS as lowercased addresses."""
+        return frozenset(a.strip().lower() for a in self.email_test_recipients.split(",") if a.strip())
 
     @property
     def effective_requests_per_second(self) -> float:

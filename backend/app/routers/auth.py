@@ -13,12 +13,16 @@ from app.routers.deps import (
     AppSettings,
     CSRFProtected,
     clear_session_cookie,
+    client_ip,
     current_user_optional,
+    get_login_ip_limiter,
     get_login_throttle,
+    get_register_ip_limiter,
     set_session_cookie,
 )
 from app.services.auth import (
     LoginThrottle,
+    SlidingWindowLimiter,
     create_session,
     delete_session,
     hash_password,
@@ -30,6 +34,11 @@ from app.services.auth import (
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 INVALID_LOGIN = "Incorrect email or password."
+TOO_MANY_LOGINS = "Too many failed login attempts. Please wait a few minutes and try again."
+
+
+def too_many(detail: str, wait: int) -> HTTPException:
+    return HTTPException(status_code=429, detail=detail, headers={"Retry-After": str(wait)})
 
 
 def account_out(user: User, preferences: ResearchPreferences) -> AccountOut:
@@ -53,7 +62,18 @@ async def load_preferences(db: DB, user: User) -> ResearchPreferences:
 
 
 @router.post("/register", status_code=201, response_model=AccountOut, dependencies=[CSRFProtected])
-async def register(body: RegisterRequest, response: Response, db: DB, settings: AppSettings) -> AccountOut:
+async def register(
+    body: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: DB,
+    settings: AppSettings,
+    ip_limiter: Annotated[SlidingWindowLimiter, Depends(get_register_ip_limiter)],
+) -> AccountOut:
+    # Every attempt counts (including "email already exists"), so scripted sign-ups
+    # and probing for registered emails are both slowed down. Checked before hashing.
+    if (wait := ip_limiter.hit(client_ip(request, settings))) is not None:
+        raise too_many("Too many sign-up attempts from your network. Please try again later.", wait)
     user = User(email=normalize_email(body.email), password_hash=await hash_password(body.password))
     db.add(user)
     try:
@@ -77,21 +97,26 @@ async def login(
     db: DB,
     settings: AppSettings,
     throttle: Annotated[LoginThrottle, Depends(get_login_throttle)],
+    ip_limiter: Annotated[SlidingWindowLimiter, Depends(get_login_ip_limiter)],
+    request: Request,
 ) -> AccountOut:
     email = normalize_email(body.email)
-    if (wait := throttle.retry_after(email)) is not None:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many failed login attempts. Please wait a few minutes and try again.",
-            headers={"Retry-After": str(wait)},
-        )
+    ip = client_ip(request, settings)
+    # Two independent limits on FAILED logins: per email (guessing one account's
+    # password) and per IP (one password tried against many emails).
+    for wait in (throttle.retry_after(email), ip_limiter.retry_after(ip)):
+        if wait is not None:
+            raise too_many(TOO_MANY_LOGINS, wait)
 
     user = (await db.execute(select(User).where(func.lower(User.email) == email))).scalar_one_or_none()
     # Always verify (against a dummy hash for unknown emails) so timing doesn't reveal which emails exist.
     if not await verify_password(user.password_hash if user else None, body.password) or user is None:
         throttle.record_failure(email)
+        ip_limiter.record(ip)
         raise HTTPException(status_code=401, detail=INVALID_LOGIN)
 
+    # Clear this email's failures. The IP counter is NOT reset: otherwise an attacker
+    # could wipe it by logging into their own account between guesses.
     throttle.reset(email)
     if needs_rehash(user.password_hash):
         user.password_hash = await hash_password(body.password)

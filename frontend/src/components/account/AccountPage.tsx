@@ -3,9 +3,11 @@
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import { SubscriptionList } from "@/components/subscriptions/SubscriptionList";
 
 import { PreferencesForm } from "./PreferencesForm";
 import { SavedSearchList } from "./SavedSearchList";
+import { TestDigestPanel } from "./TestDigestPanel";
 
 export function AccountPage() {
   const { status, account, openAuthDialog } = useAuth();
@@ -72,6 +74,8 @@ export function AccountPage() {
       {/* key: reset the form if a different user signs in */}
       <PreferencesForm key={account.user.id} />
       <SavedSearchList key={`saved-${account.user.id}`} />
+      <SubscriptionList />
+      <TestDigestPanel key={`digest-${account.user.id}`} />
     </div>
   );
 }

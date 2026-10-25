@@ -169,3 +169,97 @@ export interface SavedSearch {
   filters: SavedSearchFilters;
   created_at: string;
 }
+
+// ---------- Research subscriptions (backend /api/subscriptions) ----------
+
+/** A stored research subscription (backend `SubscriptionOut`, snake_case). */
+export interface SubscriptionApi {
+  id: string;
+  topic: string;
+  frequency: "daily" | "weekly" | "monthly";
+  /** 0 = Sunday … 6 = Saturday; null unless weekly. */
+  weekday: number | null;
+  /** 1-28; null unless monthly. */
+  month_day: number | null;
+  /** 24-hour "HH:MM". */
+  delivery_time: string;
+  time_zone: string;
+  paper_count: 5 | 10 | 15 | 20;
+  reading_level: SummaryLevel;
+  email_enabled: boolean;
+  email_when_no_new_papers: boolean;
+  /** Always false for now: no scheduler, so nothing is sent automatically (manual test emails are separate). */
+  delivery_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Create/replace body (backend `SubscriptionIn`). */
+export type SubscriptionInput = Omit<SubscriptionApi, "id" | "delivery_active" | "created_at" | "updated_at">;
+
+/** Today's AI analysis allowance (backend `AiUsageOut`). Enforced on the server. */
+export interface AiUsage {
+  used: number;
+  limit: number;
+  remaining: number;
+  /** Next reset, ISO 8601 (midnight UTC). */
+  resets_at: string;
+}
+
+// ---------- Research digests (backend /api/digests, Step C: manual test emails) ----------
+
+export type DigestAiStatus = "generated" | "limit_reached" | "failed" | "not_needed";
+
+export interface DigestPaper {
+  pmid: string;
+  title: string;
+  authors: string[];
+  journal: string | null;
+  publication_date: string | null;
+  doi: string | null;
+  doi_url: string | null;
+  pubmed_url: string;
+  ai_summary: string | null;
+  abstract_excerpt: string | null;
+  summary_note: string | null;
+}
+
+export interface DigestSection {
+  subscription_id: string;
+  topic: string;
+  frequency: "daily" | "weekly" | "monthly";
+  reading_level: SummaryLevel;
+  window: string;
+  used_fallback: boolean;
+  total_results: number;
+  papers: DigestPaper[];
+  ai_status: DigestAiStatus;
+  ai_note: string | null;
+}
+
+export interface Digest {
+  subject: string;
+  generated_at: string;
+  model: string | null;
+  sections: DigestSection[];
+  disclaimer: string;
+}
+
+/** What a test send would do for the signed-in account (never includes the API key). */
+export interface EmailStatus {
+  enabled: boolean;
+  configured: boolean;
+  recipient: string;
+  recipient_allowed: boolean;
+  sender: string;
+  test_sender: boolean;
+  sends_per_hour: number;
+  /** Always false: scheduled delivery is Step D. */
+  automatic_delivery_active: boolean;
+}
+
+export interface TestSendResult {
+  sent_to: string;
+  provider_message_id: string;
+  digest: Digest;
+}

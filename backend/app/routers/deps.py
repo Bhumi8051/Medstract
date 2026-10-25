@@ -1,5 +1,6 @@
 """Shared dependencies for account routes: current user, login requirement, CSRF check."""
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Response
@@ -8,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.db_models import User
-from app.services.auth import LoginThrottle, user_for_token
+from app.services.auth import LoginThrottle, SlidingWindowLimiter, user_for_token
+from app.services.usage import AiUsageGuard
 
 CSRF_HEADER = "X-Requested-With"
 CSRF_HEADER_VALUE = "fetch"
@@ -40,6 +42,42 @@ def require_csrf_header(request: Request) -> None:
 
 def get_login_throttle(request: Request) -> LoginThrottle:
     return request.app.state.login_throttle
+
+
+def get_login_ip_limiter(request: Request) -> SlidingWindowLimiter:
+    return request.app.state.login_ip_limiter
+
+
+def get_register_ip_limiter(request: Request) -> SlidingWindowLimiter:
+    return request.app.state.register_ip_limiter
+
+
+def client_ip(request: Request, settings: Settings) -> str:
+    """The caller's IP for rate limiting.
+
+    X-Forwarded-For is only trusted when TRUST_PROXY_HEADERS=true (i.e. behind a
+    proxy you control); otherwise a client could put any value there.
+    """
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else "unknown"
+
+
+def get_utc_now() -> datetime:
+    """Current UTC time, as a dependency so tests can pin the day."""
+    return datetime.now(UTC)
+
+
+def get_ai_usage_guard(
+    request: Request,
+    db: DB,
+    settings: AppSettings,
+    now: Annotated[datetime, Depends(get_utc_now)],
+) -> AiUsageGuard:
+    return AiUsageGuard(db, settings, request.app.state.ai_burst_limiter, now)
 
 
 def set_session_cookie(response: Response, token: str, settings: Settings) -> None:

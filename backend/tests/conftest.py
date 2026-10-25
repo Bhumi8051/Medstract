@@ -140,7 +140,10 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+asyncpg://localhost/healthcare_research_test"
 )
-ACCOUNT_TABLES = "users, user_sessions, research_preferences, saved_searches"
+ACCOUNT_TABLES = (
+    "users, user_sessions, research_preferences, saved_searches, research_subscriptions,"
+    " ai_usage_daily, ai_usage_daily_total"
+)
 
 
 def run_db(statement: str, params: dict | None = None, url: str = TEST_DATABASE_URL):
@@ -195,13 +198,21 @@ def db_client(migrated_test_db):
 
     from app.db import create_sessionmaker
     from app.main import app
-    from app.services.auth import LoginThrottle
+    from app.services.auth import LoginThrottle, SlidingWindowLimiter
 
     run_db(f"TRUNCATE {ACCOUNT_TABLES} RESTART IDENTITY CASCADE")
     engine = create_async_engine(migrated_test_db, poolclass=NullPool)
-    saved = {k: getattr(app.state, k, None) for k in ("db_sessionmaker", "login_throttle")}
+    limiter_keys = (
+        "login_throttle", "login_ip_limiter", "register_ip_limiter", "ai_burst_limiter", "email_test_limiter"
+    )
+    saved = {k: getattr(app.state, k, None) for k in ("db_sessionmaker", *limiter_keys)}
     app.state.db_sessionmaker = create_sessionmaker(engine)
+    # Fresh, generous limiters per test (tests that check limits replace them).
     app.state.login_throttle = LoginThrottle(max_failures=5, window_seconds=900)
+    app.state.login_ip_limiter = SlidingWindowLimiter(1000, 900)
+    app.state.register_ip_limiter = SlidingWindowLimiter(1000, 3600)
+    app.state.ai_burst_limiter = SlidingWindowLimiter(1000, 60)
+    app.state.email_test_limiter = SlidingWindowLimiter(1000, 3600)
 
     client = TestClient(app, base_url="http://localhost")
     client.headers.update({"X-Requested-With": "fetch"})  # what the frontend sends

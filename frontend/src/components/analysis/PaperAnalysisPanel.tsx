@@ -2,11 +2,13 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth/AuthProvider";
 import { ErrorAlert } from "@/components/feedback/ErrorAlert";
 import { analyzePaper, ApiError } from "@/lib/api/client";
 import type { PaperAnalysis, SummaryLevel } from "@/lib/api/types";
 import { labelFor, SUMMARY_LEVEL_OPTIONS } from "@/lib/filters";
 
+import { useAiUsage } from "./AiUsageProvider";
 import { AnalysisReport } from "./AnalysisReport";
 
 type PanelState =
@@ -21,7 +23,11 @@ interface PaperAnalysisPanelProps {
   summaryLevel: SummaryLevel;
 }
 
-/** On-demand AI analysis for one paper. Nothing is requested until the user clicks. */
+/**
+ * On-demand AI analysis for one paper. Nothing is requested until the user clicks.
+ * Requires login; each successful analysis uses one of the user's daily analyses.
+ * The server enforces both rules; this component only explains them.
+ */
 export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelProps) {
   const [state, setState] = useState<PanelState>({ status: "idle" });
   const [expanded, setExpanded] = useState(true);
@@ -30,11 +36,19 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
   const baseId = useId();
   const reportId = `${baseId}-report`;
   const levelLabel = labelFor(SUMMARY_LEVEL_OPTIONS, summaryLevel);
+  const { status: authStatus, openAuthDialog } = useAuth();
+  const { usage, refresh: refreshUsage } = useAiUsage();
+  const signedIn = authStatus === "authenticated";
+  const outOfAnalyses = signedIn && usage !== null && usage.remaining <= 0;
 
   // Cancel a running request if the card disappears (e.g. a new search).
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   async function run() {
+    if (!signedIn) {
+      openAuthDialog("login", "Log in or create a free account to use AI paper analysis.");
+      return;
+    }
     if (inFlightRef.current) return; // ignore double clicks while a request is running
     inFlightRef.current = true;
     const controller = new AbortController();
@@ -57,6 +71,7 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
       );
     } finally {
       inFlightRef.current = false;
+      refreshUsage(); // the server's count changed (or a failure was refunded)
     }
   }
 
@@ -71,7 +86,7 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
           <button
             type="button"
             onClick={run}
-            disabled={isLoading}
+            disabled={isLoading || outOfAnalyses}
             aria-describedby={`${baseId}-hint`}
             className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
           >
@@ -85,9 +100,11 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
             )}
             {isLoading
               ? "Analyzing…"
-              : levelChanged
-                ? `Re-analyze at ${levelLabel} level`
-                : "Analyze paper"}
+              : !signedIn
+                ? "Log in to analyze"
+                : levelChanged
+                  ? `Re-analyze at ${levelLabel} level`
+                  : "Analyze paper"}
           </button>
         )}
         {state.status === "success" && (
@@ -104,7 +121,13 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
         <p id={`${baseId}-hint`} className="text-xs text-slate-500 dark:text-slate-400">
           {isLoading
             ? `Gemini is reading the abstract at ${labelFor(SUMMARY_LEVEL_OPTIONS, state.level)} level. This can take up to a minute.`
-            : `AI summary from the PubMed abstract · ${levelLabel} level`}
+            : !signedIn
+              ? "AI paper analysis is available to signed-in users."
+              : outOfAnalyses
+                ? `You've used all ${usage.limit} AI analyses for today. They reset at ${formatReset(usage.resets_at)}.`
+                : `AI summary from the PubMed abstract · ${levelLabel} level${
+                    usage ? ` · ${usage.remaining} of ${usage.limit} left today` : ""
+                  }`}
         </p>
       </div>
 
@@ -134,4 +157,16 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
       )}
     </div>
   );
+}
+
+/** "2026-10-25T00:00:00Z" -> local time, e.g. "8:00 PM" (with the date if it isn't today). */
+function formatReset(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "midnight UTC";
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return date.toLocaleString(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

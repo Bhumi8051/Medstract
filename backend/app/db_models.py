@@ -1,9 +1,24 @@
 """Database tables. Schema changes go through Alembic migrations (backend/migrations)."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Uuid, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Time,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -81,3 +96,82 @@ class SavedSearch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (Index("ix_saved_searches_user_created", "user_id", text("created_at DESC")),)
+
+
+class ResearchSubscription(Base):
+    """A user's research subscription (stored settings, Step A).
+
+    Nothing is sent on its schedule yet: email_enabled is a stored preference
+    until a scheduler exists (Step D). Manual test digests (Step C) read these
+    settings but don't change them.
+    """
+
+    __tablename__ = "research_subscriptions"
+    __mapper_args__ = EAGER
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # Indexed via the unique (user_id, topic_key) constraint and the created_at index.
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    topic: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Normalized topic (services/text.normalize_title, same rule as the frontend's
+    # topicKey): lowercase, accents removed, punctuation/spacing collapsed.
+    topic_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(10), nullable=False)
+    weekday: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)  # 0 = Sunday … 6 = Saturday
+    month_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)  # 1-28
+    delivery_time: Mapped[time] = mapped_column(Time, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String(64), nullable=False)
+    paper_count: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    reading_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    email_when_no_new_papers: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # One subscription per topic per user, using the normalized key.
+        UniqueConstraint("user_id", "topic_key", name="uq_research_subscriptions_user_topic"),
+        CheckConstraint("topic_key <> ''", name="ck_research_subscriptions_topic_key"),
+        CheckConstraint("frequency IN ('daily', 'weekly', 'monthly')", name="ck_research_subscriptions_frequency"),
+        CheckConstraint(
+            # IS NOT NULL matters: "NULL BETWEEN 0 AND 6" is unknown, which a CHECK would let through.
+            "(frequency = 'weekly' AND weekday IS NOT NULL AND weekday BETWEEN 0 AND 6 AND month_day IS NULL)"
+            " OR (frequency = 'monthly' AND month_day IS NOT NULL AND month_day BETWEEN 1 AND 28 AND weekday IS NULL)"
+            " OR (frequency = 'daily' AND weekday IS NULL AND month_day IS NULL)",
+            name="ck_research_subscriptions_schedule",
+        ),
+        CheckConstraint("paper_count IN (5, 10, 15, 20)", name="ck_research_subscriptions_paper_count"),
+        CheckConstraint(
+            "reading_level IN ('high_school', 'college', 'phd')", name="ck_research_subscriptions_reading_level"
+        ),
+        Index("ix_research_subscriptions_user_created", "user_id", text("created_at DESC")),
+    )
+
+
+class AiUsageDaily(Base):
+    """Successful AI analyses per user per UTC day (Step B usage limit).
+
+    Incremented atomically (INSERT ... ON CONFLICT DO UPDATE ... WHERE used < limit)
+    before Gemini is called, and decremented again if the analysis fails.
+    """
+
+    __tablename__ = "ai_usage_daily"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    used: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    __table_args__ = (CheckConstraint("used >= 0", name="ck_ai_usage_daily_used"),)
+
+
+class AiUsageDailyTotal(Base):
+    """Successful AI analyses by all users per UTC day (protects the project's Gemini quota)."""
+
+    __tablename__ = "ai_usage_daily_total"
+
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    used: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+    __table_args__ = (CheckConstraint("used >= 0", name="ck_ai_usage_daily_total_used"),)

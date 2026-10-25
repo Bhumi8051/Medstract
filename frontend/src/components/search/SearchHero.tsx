@@ -2,6 +2,7 @@
 
 import { useId, type FormEvent } from "react";
 
+import { SubscribeBell } from "@/components/subscriptions/SubscribeBell";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type { Period } from "@/lib/api/types";
 import { PERIOD_OPTIONS, SUMMARY_LEVEL_OPTIONS, type SummaryLevel } from "@/lib/filters";
@@ -104,6 +105,8 @@ export function SearchHero({
             )}
             {isLoading ? "Searching…" : "Search"}
           </button>
+          {/* Subscribe to this topic (prefilled from the search box). */}
+          <SubscribeBell topic={query} readingLevel={summaryLevel} />
         </div>
         {queryError && (
           <p id={errorId} className="mt-2 text-left text-sm text-red-700 dark:text-red-400">

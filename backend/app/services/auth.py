@@ -12,6 +12,7 @@ import secrets
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from argon2 import PasswordHasher
@@ -86,42 +87,68 @@ async def delete_all_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
 
 
-class LoginThrottle:
-    """Allow at most `max_failures` failed logins per email within `window_seconds`.
+class SlidingWindowLimiter:
+    """At most `max_events` events per key within `window_seconds`.
 
-    In-memory: resets when the server restarts and isn't shared between
-    processes. Fine for this single-process app; use Redis or the database
-    if the backend is ever scaled out.
+    Used for failed logins (per email and per IP), registrations per IP and
+    analysis bursts per user.
+
+    IN-MEMORY ONLY: counters reset when the server restarts and are NOT shared
+    between multiple workers or servers. That is fine for the current single-
+    process development setup; switch to a shared store (Redis or PostgreSQL)
+    before running several workers, or each worker gets its own allowance.
     """
 
-    _MAX_TRACKED = 10_000  # bound memory if someone sprays random emails
+    _MAX_TRACKED = 10_000  # bound memory if someone sprays random keys
 
-    def __init__(self, max_failures: int, window_seconds: int) -> None:
-        self.max_failures = max_failures
+    def __init__(self, max_events: int, window_seconds: int, clock: Callable[[], float] = time.monotonic) -> None:
+        self.max_events = max_events
         self.window_seconds = window_seconds
-        self._failures: dict[str, deque[float]] = {}
+        self._clock = clock
+        self._events: dict[str, deque[float]] = {}
 
     def _recent(self, key: str, now: float) -> deque[float]:
-        attempts = self._failures.get(key, deque())
-        while attempts and now - attempts[0] > self.window_seconds:
-            attempts.popleft()
-        return attempts
+        events = self._events.get(key, deque())
+        while events and now - events[0] > self.window_seconds:
+            events.popleft()
+        return events
 
     def retry_after(self, key: str) -> int | None:
-        """Seconds until another attempt is allowed, or None if allowed now."""
-        now = time.monotonic()
-        attempts = self._recent(key, now)
-        if len(attempts) < self.max_failures:
+        """Seconds until another event is allowed, or None if allowed now."""
+        now = self._clock()
+        events = self._recent(key, now)
+        if len(events) < self.max_events:
             return None
-        return max(1, int(self.window_seconds - (now - attempts[0])) + 1)
+        return max(1, int(self.window_seconds - (now - events[0])) + 1)
 
-    def record_failure(self, key: str) -> None:
-        now = time.monotonic()
-        if key not in self._failures and len(self._failures) >= self._MAX_TRACKED:
-            self._failures.pop(next(iter(self._failures)))
-        attempts = self._recent(key, now)
-        attempts.append(now)
-        self._failures[key] = attempts
+    def record(self, key: str) -> None:
+        now = self._clock()
+        if key not in self._events and len(self._events) >= self._MAX_TRACKED:
+            self._events.pop(next(iter(self._events)))
+        events = self._recent(key, now)
+        events.append(now)
+        self._events[key] = events
+
+    def hit(self, key: str) -> int | None:
+        """Check and record in one step: returns retry-after seconds if over the limit, else records and returns None."""
+        wait = self.retry_after(key)
+        if wait is None:
+            self.record(key)
+        return wait
 
     def reset(self, key: str) -> None:
-        self._failures.pop(key, None)
+        self._events.pop(key, None)
+
+
+class LoginThrottle(SlidingWindowLimiter):
+    """Failed logins per email (kept for compatibility; same in-memory caveats)."""
+
+    def __init__(self, max_failures: int, window_seconds: int, clock: Callable[[], float] = time.monotonic) -> None:
+        super().__init__(max_failures, window_seconds, clock)
+
+    @property
+    def max_failures(self) -> int:
+        return self.max_events
+
+    def record_failure(self, key: str) -> None:
+        self.record(key)

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator, model_validator
 
@@ -290,3 +290,178 @@ class SavedSearchOut(BaseModel):
     query: str
     filters: SavedSearchFilters
     created_at: datetime
+
+
+# ---------- Research subscriptions (Step A: stored settings, no delivery yet) ----------
+
+MAX_SUBSCRIPTIONS_PER_USER = 50
+SUBSCRIPTION_TOPIC_MAX_LENGTH = 200
+
+
+class SubscriptionFrequency(StrEnum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
+class SubscriptionIn(BaseModel):
+    """Create/replace body for /api/subscriptions. Validated fully on the server."""
+
+    model_config = {"extra": "forbid"}
+
+    topic: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=SUBSCRIPTION_TOPIC_MAX_LENGTH)
+    ]
+    frequency: SubscriptionFrequency
+    weekday: int | None = Field(default=None, ge=0, le=6, description="0 = Sunday … 6 = Saturday; weekly only.")
+    month_day: int | None = Field(default=None, ge=1, le=28, description="1-28; monthly only.")
+    delivery_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description='24-hour "HH:MM".')
+    time_zone: str = Field(max_length=64, description='IANA time zone, e.g. "America/New_York".')
+    paper_count: Literal[5, 10, 15, 20]
+    reading_level: SummaryLevel
+    email_enabled: bool = True
+    email_when_no_new_papers: bool = False
+
+    @field_validator("topic")
+    @classmethod
+    def _topic_has_words(cls, topic: str) -> str:
+        from app.services.text import normalize_title  # local import keeps models.py dependency-free
+
+        topic = " ".join(topic.split())
+        if not normalize_title(topic):
+            raise ValueError("Topic must contain letters or numbers.")
+        return topic
+
+    @field_validator("time_zone")
+    @classmethod
+    def _known_time_zone(cls, time_zone: str) -> str:
+        import zoneinfo
+
+        if time_zone not in zoneinfo.available_timezones():
+            raise ValueError("Unknown time zone.")
+        return time_zone
+
+    @model_validator(mode="after")
+    def _schedule_fields(self) -> "SubscriptionIn":
+        """Require the day the frequency needs; clear the one it doesn't."""
+        if self.frequency is SubscriptionFrequency.WEEKLY:
+            if self.weekday is None:
+                raise ValueError("weekday is required for weekly subscriptions.")
+            self.month_day = None
+        elif self.frequency is SubscriptionFrequency.MONTHLY:
+            if self.month_day is None:
+                raise ValueError("month_day is required for monthly subscriptions.")
+            self.weekday = None
+        else:
+            self.weekday = None
+            self.month_day = None
+        return self
+
+
+class SubscriptionOut(BaseModel):
+    id: uuid.UUID
+    topic: str
+    frequency: SubscriptionFrequency
+    weekday: int | None
+    month_day: int | None
+    delivery_time: str
+    time_zone: str
+    paper_count: int
+    reading_level: SummaryLevel
+    email_enabled: bool
+    email_when_no_new_papers: bool
+    delivery_active: bool = Field(
+        default=False,
+        description="Always false for now: there is no scheduler, so nothing is sent automatically "
+        "(Step D). email_enabled is only a stored preference. Manual test emails are separate "
+        "(/api/digests/test-send).",
+    )
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------- AI usage (Step B) ----------
+
+
+class AiUsageOut(BaseModel):
+    used: int = Field(description="Successful AI analyses today (UTC).")
+    limit: int = Field(description="Per-user daily limit.")
+    remaining: int = Field(description="Analyses still available today (also respects the overall daily cap).")
+    resets_at: datetime = Field(description="Next reset (midnight UTC).")
+
+
+# ---------- Research digests (Step C: manual test emails only) ----------
+
+MAX_DIGEST_SUBSCRIPTIONS = 3
+
+
+class DigestRequest(BaseModel):
+    """Which subscriptions to include. The recipient is never part of the request."""
+
+    model_config = {"extra": "forbid"}
+
+    subscription_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_DIGEST_SUBSCRIPTIONS)
+
+    @field_validator("subscription_ids")
+    @classmethod
+    def _unique(cls, ids: list[uuid.UUID]) -> list[uuid.UUID]:
+        return list(dict.fromkeys(ids))
+
+
+class DigestAiStatus(StrEnum):
+    GENERATED = "generated"  # Gemini summaries included (some may be withheld, see summary_note)
+    LIMIT_REACHED = "limit_reached"  # daily AI allowance used up: abstract excerpts instead
+    FAILED = "failed"  # Gemini error or unusable output (refunded): abstract excerpts instead
+    NOT_NEEDED = "not_needed"  # no paper had an abstract to summarize
+
+
+class DigestPaper(BaseModel):
+    pmid: str
+    title: str
+    authors: list[str]
+    journal: str | None
+    publication_date: str | None
+    doi: str | None
+    doi_url: str | None
+    pubmed_url: str
+    ai_summary: str | None = Field(description="Gemini summary of the abstract, if available.")
+    abstract_excerpt: str | None = Field(description="Start of the abstract, shown when there is no AI summary.")
+    summary_note: str | None = Field(description="Why there is no AI summary, if there isn't one.")
+
+
+class DigestSection(BaseModel):
+    subscription_id: uuid.UUID
+    topic: str
+    frequency: SubscriptionFrequency
+    reading_level: SummaryLevel
+    window: str = Field(description='Publication window searched, e.g. "Past week".')
+    used_fallback: bool = Field(description="True if the window had no papers and any date was used instead.")
+    total_results: int
+    papers: list[DigestPaper]
+    ai_status: DigestAiStatus
+    ai_note: str | None = None
+
+
+class DigestOut(BaseModel):
+    subject: str
+    generated_at: datetime
+    model: str | None = Field(description="Gemini model used for summaries, if any.")
+    sections: list[DigestSection]
+    disclaimer: str
+
+
+class EmailStatusOut(BaseModel):
+    enabled: bool = Field(description="EMAIL_ENABLED on the server.")
+    configured: bool = Field(description="RESEND_API_KEY is set (its value is never returned).")
+    recipient: str = Field(description="Test digests go only to the signed-in account's email.")
+    recipient_allowed: bool = Field(description="The account email is listed in EMAIL_TEST_RECIPIENTS.")
+    sender: str
+    test_sender: bool = Field(description="Using Resend's onboarding@resend.dev test sender.")
+    sends_per_hour: int
+    automatic_delivery_active: bool = Field(default=False, description="Always false: scheduling is Step D.")
+
+
+class TestSendOut(BaseModel):
+    sent_to: str
+    provider_message_id: str
+    digest: DigestOut

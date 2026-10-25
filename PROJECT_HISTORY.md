@@ -25,9 +25,12 @@ This file records what has been built, milestone by milestone, and the decisions
 | Product update | Hero search, period, filter sidebar, summary level | 116 | `2fc0d01` |
 | Maintenance | `dev.sh`, README, CORS, first commit | 128 | `2fc0d01` |
 | Milestone 4 | Gemini paper analysis | 190 | `071da4d` |
-| Milestone 5 | Accounts, preferences, saved searches | 251 | not committed yet |
+| Milestone 5 | Accounts, preferences, saved searches | 251 | `96fd5b6` |
+| Step A | Persistent research subscriptions | 301 | branch `feature/research-subscriptions`, not committed yet |
+| Step B | Security hardening (AI login, usage limits, log redaction) | 338 | same branch, not committed yet |
+| Step C | Manual test email digests (Resend) | 397 | same branch, not committed yet |
 
-Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi8051/Healthcare-Research`).
+Commits up to `96fd5b6` are on `main` and on GitHub (`Bhumi8051/Healthcare-Research`). The Step A–C work is on `feature/research-subscriptions`, which has never been pushed.
 
 ---
 
@@ -145,11 +148,29 @@ Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi80
   - Your preferred summary level is applied when you log in or change it, and interests appear as one-click searches.
 - **Tests:** 54 database tests against `healthcare_research_test`, including a migration round-trip and a check that the models match the migrations. Plus a full browser test of the account flow.
 
+## Research subscriptions and email (branch `feature/research-subscriptions`)
+
+Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sections 4.9, 4.10 and 4.12).
+
+- **Prototype:** a bell beside the search box, "Follow topic" on paper cards, a subscription dialog, and a list on `/account`. UI refined after feedback (uniform controls, a ringing bell, a time dropdown instead of Safari's time input).
+- **Step A, persistent subscriptions:** a `research_subscriptions` table (migration `b4f1c80f6ca2`) and a login-protected `/api/subscriptions` API. Each topic can be followed once per user. Settings are validated on the server, and other users' subscriptions answer 404.
+- **Step B, security hardening:**
+  - AI analysis now requires login.
+  - Daily AI limits (20 per user, 200 overall) are enforced in PostgreSQL (migration `bd806695a174`), and failures are refunded.
+  - Logins and sign-ups are limited per IP, in memory.
+  - API keys and passwords are removed from logs, and PubMed errors shown to users are generic.
+- **Step C, manual test email digests:**
+  - From `/account`, preview a digest for 1–3 subscriptions, or send one test email to yourself through Resend.
+  - Each topic gets a PubMed search and one Gemini request summarizing its papers. Summaries are checked against the abstracts, and abstract excerpts are used if AI isn't available.
+  - Safety: email is off unless `EMAIL_ENABLED=true`. The recipient is always your own account email, which must be in `EMAIL_TEST_RECIPIENTS`. Sends are limited per hour.
+  - **A real test email was delivered on 2026-10-25 (UTC).**
+- **Not built yet (Step D):** automatic daily, weekly or monthly delivery. Nothing is sent on a subscription's schedule.
+
 ---
 
 ## Important things to remember
 
-- **Where secrets live:** only `backend/.env` (NCBI key, Gemini key, database URL). Git ignores it. `frontend/.env.local` holds only the public API URL. Never paste keys into chats or frontend code.
+- **Where secrets live:** only `backend/.env` (NCBI key, Gemini key, Resend key, database URL). Git ignores it. `frontend/.env.local` holds only the public API URL. Never paste keys into chats or frontend code.
 - **After editing `.env`, restart the backend.** `--reload` only watches `.py` files.
 - **"Address already in use"** means a server is already running on that port. Find it with `lsof -nP -iTCP:8010 -sTCP:LISTEN`.
 - **Open the app at `http://localhost:3000`, not `127.0.0.1`,** or the login cookie won't be sent.
@@ -160,11 +181,12 @@ Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi80
 
 ```bash
 ./dev.sh                                                  # backend :8010 + frontend :3000
-cd backend && .venv/bin/python -m pytest                  # 251 tests (PostgreSQL must be running)
+cd backend && .venv/bin/python -m pytest                  # 397 tests + 1 opt-in live test (PostgreSQL must be running)
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
 
 ## Not done yet
 
 - **Milestone 6:** deployment and production settings, including `SESSION_COOKIE_SECURE=true` and turning off local CORS.
-- **Later:** weekly email digests, password reset, email verification, account deletion in the UI, caching of AI analyses.
+- **Step D:** automatic (scheduled) email digests. Needs a scheduler, a record of papers already sent, and a verified sending domain to email anyone other than the Resend account owner.
+- **Later:** password reset, email verification, account deletion in the UI, caching of AI analyses.

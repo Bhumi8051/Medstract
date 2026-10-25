@@ -5,6 +5,48 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Subscription bell "ring". Plain CSS classes (not Tailwind utilities) so the
+   animation never depends on Tailwind's file scanning. Skipped for reduced motion. */
+@keyframes bell-ring {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(16deg);
+  }
+  30% {
+    transform: rotate(-14deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  60% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+
+.bell-swing {
+  transform-origin: 50% 8%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Rings once (e.g. right after a subscription is saved). */
+  .bell-swing.bell-ring-once {
+    animation: bell-ring 0.9s ease-in-out 1;
+  }
+
+  /* Rings when the pointer is over its button. */
+  @media (hover: hover) {
+    .bell-trigger:hover .bell-swing {
+      animation: bell-ring 0.9s ease-in-out 1;
+    }
+  }
+}
+
 :root {
   color-scheme: light dark;
 }

@@ -1,5 +1,26 @@
 """Shared test helpers. Tests never call the real PubMed: HTTP is mocked with httpx.MockTransport."""
 
+import os
+
+# Safety: tests start the real app (TestClient runs its startup), which reads backend/.env.
+# Whatever that file or the shell says, a test run must never start the digest scheduler,
+# enable scheduled sending, or be able to send real email. Environment variables take
+# precedence over .env, and this runs before any application settings are created.
+# (Tests that need these features build their own Settings with make_settings.)
+TEST_SAFETY_ENV = {
+    "DIGEST_SCHEDULER_ENABLED": "false",
+    "DIGEST_DELIVERY_MODE": "off",
+    "EMAIL_ENABLED": "false",
+    "RESEND_API_KEY": "",
+}
+os.environ.update(TEST_SAFETY_ENV)
+
+from app.config import get_settings  # noqa: E402
+
+# If anything created the cached settings before this file ran, discard them so
+# the values above take effect.
+get_settings.cache_clear()
+
 from collections.abc import Callable
 from xml.sax.saxutils import escape
 
@@ -9,6 +30,22 @@ import pytest
 from app.config import Settings
 from app.models import Paper
 from app.services.pubmed import PubMedClient
+
+
+@pytest.fixture(autouse=True)
+def _real_email_and_scheduler_stay_off():
+    """Checked around every test: the app-wide settings never allow scheduling or real email."""
+    _assert_safe_settings()
+    yield
+    _assert_safe_settings()
+
+
+def _assert_safe_settings() -> None:
+    settings = get_settings()
+    assert settings.digest_scheduler_enabled is False
+    assert settings.digest_delivery_mode == "off"
+    assert settings.email_enabled is False
+    assert settings.resend_key_value is None
 
 
 @pytest.fixture
@@ -142,7 +179,7 @@ TEST_DATABASE_URL = os.environ.get(
 )
 ACCOUNT_TABLES = (
     "users, user_sessions, research_preferences, saved_searches, research_subscriptions,"
-    " ai_usage_daily, ai_usage_daily_total"
+    " ai_usage_daily, ai_usage_daily_total, digest_deliveries, digest_sent_papers"
 )
 
 
@@ -203,7 +240,8 @@ def db_client(migrated_test_db):
     run_db(f"TRUNCATE {ACCOUNT_TABLES} RESTART IDENTITY CASCADE")
     engine = create_async_engine(migrated_test_db, poolclass=NullPool)
     limiter_keys = (
-        "login_throttle", "login_ip_limiter", "register_ip_limiter", "ai_burst_limiter", "email_test_limiter"
+        "login_throttle", "login_ip_limiter", "register_ip_limiter", "ai_burst_limiter", "email_test_limiter",
+        "unsubscribe_ip_limiter",
     )
     saved = {k: getattr(app.state, k, None) for k in ("db_sessionmaker", *limiter_keys)}
     app.state.db_sessionmaker = create_sessionmaker(engine)
@@ -213,6 +251,7 @@ def db_client(migrated_test_db):
     app.state.register_ip_limiter = SlidingWindowLimiter(1000, 3600)
     app.state.ai_burst_limiter = SlidingWindowLimiter(1000, 60)
     app.state.email_test_limiter = SlidingWindowLimiter(1000, 3600)
+    app.state.unsubscribe_ip_limiter = SlidingWindowLimiter(1000, 600)
 
     client = TestClient(app, base_url="http://localhost")
     client.headers.update({"X-Requested-With": "fetch"})  # what the frontend sends

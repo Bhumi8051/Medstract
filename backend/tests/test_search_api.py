@@ -332,4 +332,4 @@ def test_real_app_allows_frontend_dev_origin(api):
 
 
 def test_health(api):
-    assert api(pubmed_handler(esearch_json([]), efetch_xml())).get("/health").json() == {"status": "ok"}
+    assert api(pubmed_handler(esearch_json([]), efetch_xml())).get("/health").json()["status"] == "ok"

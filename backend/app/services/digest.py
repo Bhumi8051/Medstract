@@ -17,6 +17,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -176,12 +177,22 @@ class SubscriptionSnapshot:
         )
 
 
+class AiBudget(Protocol):
+    """Where AI summaries are paid from. AiUsageGuard (the user's own daily
+    allowance) for manual digests; the overall daily cap for scheduled ones
+    (services/delivery.py). reserve() raises UsageLimitError when exhausted."""
+
+    async def reserve(self, user_id: uuid.UUID) -> Any: ...
+
+    async def refund(self, reservation: Any) -> None: ...
+
+
 @dataclass
 class DigestContext:
     pubmed: PubMedClient
     settings: Settings
     generator: ReportGenerator
-    usage: AiUsageGuard
+    usage: AiBudget | AiUsageGuard
     user_id: uuid.UUID
     today: date
 
@@ -217,9 +228,8 @@ async def summarize(ctx: DigestContext, papers: list[Paper], level: SummaryLevel
 
 
 async def build_section(ctx: DigestContext, subscription: SubscriptionSnapshot) -> DigestSection:
-    frequency = subscription.frequency
-    level = subscription.reading_level
-    period, window = WINDOWS[frequency]
+    """Manual (Step C) digests: the frequency's window, falling back to any date."""
+    period, window = WINDOWS[subscription.frequency]
 
     result = await search_papers(
         ctx.pubmed,
@@ -236,9 +246,37 @@ async def build_section(ctx: DigestContext, subscription: SubscriptionSnapshot) 
         result = await search_papers(ctx.pubmed, ctx.settings, subscription.topic, max_results=subscription.paper_count)
         used_fallback = True
 
-    status, note, summaries, withheld = await summarize(ctx, result.papers, level)
+    return await assemble_section(
+        ctx,
+        subscription,
+        result.papers,
+        window="Any date (nothing found in the " + window.lower() + ")" if used_fallback else window,
+        used_fallback=used_fallback,
+        total_results=result.total_results,
+    )
+
+
+async def assemble_section(
+    ctx: DigestContext,
+    subscription: SubscriptionSnapshot,
+    found: list[Paper],
+    *,
+    window: str,
+    used_fallback: bool,
+    total_results: int,
+    use_ai: bool = True,
+    empty_note: str | None = None,
+) -> DigestSection:
+    """Turn already-chosen papers into a digest section, with AI summaries if allowed."""
+    level = subscription.reading_level
+    if not found:
+        status, note, summaries, withheld = DigestAiStatus.NOT_NEEDED, empty_note, {}, {}
+    elif use_ai:
+        status, note, summaries, withheld = await summarize(ctx, found, level)
+    else:
+        status, note, summaries, withheld = DigestAiStatus.SKIPPED, "AI summaries are skipped in dry runs.", {}, {}
     papers = []
-    for paper in result.papers:
+    for paper in found:
         summary = summaries.get(paper.pmid)
         if summary:
             paper_note = None
@@ -266,11 +304,11 @@ async def build_section(ctx: DigestContext, subscription: SubscriptionSnapshot) 
     return DigestSection(
         subscription_id=subscription.id,
         topic=subscription.topic,
-        frequency=frequency,
+        frequency=subscription.frequency,
         reading_level=level,
-        window="Any date (nothing found in the " + window.lower() + ")" if used_fallback else window,
+        window=window,
         used_fallback=used_fallback,
-        total_results=result.total_results,
+        total_results=total_results,
         papers=papers,
         ai_status=status,
         ai_note=note,

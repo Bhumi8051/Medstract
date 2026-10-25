@@ -2,7 +2,7 @@
 
 Search, filter and rank biomedical papers from **PubMed** (the only literature source).
 
-For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt).
+For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt). For running scheduled digests, see [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md).
 
 - **Backend:** Python, FastAPI and Pydantic, in `backend/`. It calls NCBI E-utilities (ESearch and EFetch).
 - **AI analysis:** Google Gemini, on demand per paper, grounded in the PubMed abstract.
@@ -86,6 +86,23 @@ From the **/account** page you can preview a research digest for 1–3 of your s
 
 Safety: the recipient is always the signed-in account's email (it can't be set in the request), it must be in `EMAIL_TEST_RECIPIENTS`, sending is off unless `EMAIL_ENABLED=true`, and test sends are limited per hour. Each preview or send uses 1 of your daily AI analyses per topic for the summaries; if AI isn't available, the digest uses abstract excerpts instead.
 
+## Scheduled digests (testing only, off by default)
+
+Subscriptions can be delivered automatically on their daily, weekly or monthly schedule. This is still in testing:
+
+- **Modes:**
+  - `DIGEST_DELIVERY_MODE=off` (default): nothing runs.
+  - `dry_run`: digests are built and stored, never sent.
+  - `allowlist`: real emails, but only to `EMAIL_TEST_RECIPIENTS`.
+
+  There's no mode that emails everyone.
+- **Where it runs:** the scheduler runs inside the backend only with `DIGEST_SCHEDULER_ENABLED=true`. Otherwise, run one tick by hand with `cd backend && .venv/bin/python -m app.jobs.digests run-once --dry-run`.
+- **Checking on it:** `python -m app.jobs.digests status` shows the configuration, the next runs, the history and any problems with what to do. `GET /health` shows the scheduler's heartbeat.
+- **Unsubscribing:** every scheduled email has an unsubscribe link (no login needed) and `List-Unsubscribe` headers. One-click unsubscribe in mail apps needs https and a verified sending domain.
+- **On `/account`:** each subscription's status, next run and last delivery, plus the full delivery history.
+
+The setup, dry-run testing, retries, "needs review" deliveries and troubleshooting are all in **[docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md)**.
+
 ## Run
 
 ```bash
@@ -132,4 +149,4 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 
 ## Not yet implemented
 
-Automatic (scheduled) email digests for subscriptions (only manual test emails exist so far), password reset, email verification, and changing or deleting an account from the UI.
+Scheduled digests to anyone other than allowlisted test addresses (this needs a verified sending domain and account email verification), password reset, email verification, and changing or deleting an account from the UI.

@@ -3,8 +3,9 @@
 import { useId } from "react";
 
 import { ErrorAlert } from "@/components/feedback/ErrorAlert";
+import { formatInZone } from "@/lib/deliveries";
 import { labelFor } from "@/lib/filters";
-import { describeSchedule, READING_LEVEL_OPTIONS } from "@/lib/subscriptions";
+import { describeSchedule, READING_LEVEL_OPTIONS, type Subscription } from "@/lib/subscriptions";
 
 import { BellGlyph } from "./SubscriptionDialog";
 import { useSubscriptions } from "./SubscriptionsProvider";
@@ -13,6 +14,7 @@ import { useSubscriptions } from "./SubscriptionsProvider";
 export function SubscriptionList() {
   const { subscriptions, status, loadError, reload, openSubscriptionDialog } = useSubscriptions();
   const headingId = useId();
+  const anyActive = subscriptions.some((s) => s.deliveryActive);
 
   return (
     <section
@@ -32,9 +34,15 @@ export function SubscriptionList() {
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Saved to your account.{" "}
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-              Email delivery not active yet
-            </span>
+            {anyActive ? (
+              <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-900 dark:bg-teal-950 dark:text-teal-200">
+                Automatic emails on (test mode: approved addresses only)
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                Automatic emails not active yet
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -82,11 +90,16 @@ export function SubscriptionList() {
                   {subscription.topic}
                 </h3>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{describeSchedule(subscription)}</p>
+                <DeliveryStatusLine subscription={subscription} />
                 <ul className="mt-1.5 flex flex-wrap gap-1.5 text-xs">
                   {[
                     `${subscription.paperCount} papers`,
                     labelFor(READING_LEVEL_OPTIONS, subscription.readingLevel),
-                    subscription.autoEmail ? "Email on (not active yet)" : "Email off",
+                    subscription.autoEmail
+                      ? subscription.deliveryActive
+                        ? "Email on"
+                        : "Email on (not active yet)"
+                      : "Email off",
                     ...(subscription.autoEmail && subscription.emailWhenNoNewPapers ? ["Email even if nothing new"] : []),
                   ].map((label) => (
                     <li key={label} className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -107,5 +120,26 @@ export function SubscriptionList() {
         </ul>
       )}
     </section>
+  );
+}
+
+/** Status, next scheduled run and last successful delivery for one subscription. */
+function DeliveryStatusLine({ subscription }: { subscription: Subscription }) {
+  const { unsubscribedAt, autoEmail, nextRunAt, lastSentAt, timeZone, deliveryActive } = subscription;
+  let status: string;
+  if (unsubscribedAt) {
+    status = `Unsubscribed from an email link on ${formatInZone(unsubscribedAt, timeZone)}. Turn email back on with Manage.`;
+  } else if (!autoEmail) {
+    status = "Email is off for this topic.";
+  } else if (nextRunAt) {
+    status = `${deliveryActive ? "Next digest" : "Next scheduled run (not emailed yet)"}: ${formatInZone(nextRunAt, timeZone)}`;
+  } else {
+    status = "Next run: scheduled when the digest scheduler next runs.";
+  }
+  return (
+    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400" data-testid="delivery-status">
+      {status}
+      {lastSentAt && <> · Last sent {formatInZone(lastSentAt, timeZone)}</>}
+    </p>
   );
 }

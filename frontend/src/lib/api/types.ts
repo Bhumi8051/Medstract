@@ -188,14 +188,26 @@ export interface SubscriptionApi {
   reading_level: SummaryLevel;
   email_enabled: boolean;
   email_when_no_new_papers: boolean;
-  /** Always false for now: no scheduler, so nothing is sent automatically (manual test emails are separate). */
+  /**
+   * True only if the scheduler would really email this subscription now (allowlist test mode, scheduler on,
+   * address allowlisted, email on, not unsubscribed). Manual test emails are separate.
+   */
   delivery_active: boolean;
+  /** Next scheduled digest (ISO, UTC); null while email is off or unsubscribed. */
+  next_run_at: string | null;
+  /** Last scheduled digest the email service accepted. */
+  last_sent_at: string | null;
+  /** Set when an unsubscribe link in an email was used. */
+  unsubscribed_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 /** Create/replace body (backend `SubscriptionIn`). */
-export type SubscriptionInput = Omit<SubscriptionApi, "id" | "delivery_active" | "created_at" | "updated_at">;
+export type SubscriptionInput = Omit<
+  SubscriptionApi,
+  "id" | "delivery_active" | "next_run_at" | "last_sent_at" | "unsubscribed_at" | "created_at" | "updated_at"
+>;
 
 /** Today's AI analysis allowance (backend `AiUsageOut`). Enforced on the server. */
 export interface AiUsage {
@@ -208,7 +220,8 @@ export interface AiUsage {
 
 // ---------- Research digests (backend /api/digests, Step C: manual test emails) ----------
 
-export type DigestAiStatus = "generated" | "limit_reached" | "failed" | "not_needed";
+/** "skipped": AI was deliberately not requested (scheduled dry runs); abstract excerpts are shown. */
+export type DigestAiStatus = "generated" | "limit_reached" | "failed" | "not_needed" | "skipped";
 
 export interface DigestPaper {
   pmid: string;
@@ -254,7 +267,11 @@ export interface EmailStatus {
   sender: string;
   test_sender: boolean;
   sends_per_hour: number;
-  /** Always false: scheduled delivery is Step D. */
+  /** DIGEST_DELIVERY_MODE on the server. */
+  delivery_mode: "off" | "dry_run" | "allowlist";
+  /** DIGEST_SCHEDULER_ENABLED: the scheduler runs inside the backend. */
+  scheduler_enabled: boolean;
+  /** Scheduled digests would be emailed to this account now. */
   automatic_delivery_active: boolean;
 }
 
@@ -262,4 +279,39 @@ export interface TestSendResult {
   sent_to: string;
   provider_message_id: string;
   digest: Digest;
+}
+
+// ---------- Scheduled digest history and unsubscribe (backend /api/digests/deliveries, /api/unsubscribe) ----------
+
+export type DeliveryStatus =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "dry_run"
+  | "skipped_no_new"
+  | "skipped_missed"
+  | "skipped_disabled"
+  | "failed"
+  | "needs_review";
+
+/** One scheduled run. Contains no email content or addresses. */
+export interface DigestDelivery {
+  id: string;
+  subscription_id: string;
+  topic: string;
+  scheduled_for: string;
+  status: DeliveryStatus;
+  /** Short fixed code such as "unsubscribed" or "resend_429". */
+  reason: string | null;
+  attempts: number;
+  papers_count: number | null;
+  window_start: string | null;
+  window_end: string | null;
+  sent_at: string | null;
+  mode: "dry_run" | "allowlist" | null;
+}
+
+export interface UnsubscribeResult {
+  status: "subscribed" | "unsubscribed" | "already_unsubscribed";
+  topic: string;
 }

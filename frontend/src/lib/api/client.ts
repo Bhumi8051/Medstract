@@ -9,6 +9,7 @@ import type {
   Account,
   AiUsage,
   Digest,
+  DigestDelivery,
   EmailStatus,
   PaperAnalysis,
   Preferences,
@@ -20,6 +21,7 @@ import type {
   SubscriptionInput,
   SummaryLevel,
   TestSendResult,
+  UnsubscribeResult,
 } from "./types";
 
 // This project's backend runs on port 8010 (see README.md); NEXT_PUBLIC_API_URL overrides it.
@@ -395,4 +397,39 @@ export async function sendTestDigest(subscriptionIds: string[], signal?: AbortSi
     digestOptions({ subscription_ids: subscriptionIds }),
     signal,
   )) as TestSendResult;
+}
+
+/** The signed-in user's scheduled digest runs, newest first. */
+export async function listDeliveries(signal?: AbortSignal): Promise<DigestDelivery[]> {
+  return (await requestJson("/api/digests/deliveries", accountOptions("GET"), signal)) as DigestDelivery[];
+}
+
+// ---------- unsubscribe links (no login: the token in the link is the only credential) ----------
+
+const UNSUBSCRIBE_STATUS_MESSAGES: Record<number, string> = {
+  404: "This unsubscribe link is invalid or no longer exists.",
+  422: "This unsubscribe link is incomplete. Open it again from the email.",
+  429: "Too many attempts. Please wait a few minutes and try again.",
+};
+
+const unsubscribeOptions = (method: RequestOptions["method"], body?: unknown): RequestOptions => ({
+  method,
+  body,
+  timeoutMs: ACCOUNT_TIMEOUT_MS,
+  timeoutMessage: "The server took too long to respond. Please try again.",
+  statusMessages: UNSUBSCRIBE_STATUS_MESSAGES,
+});
+
+/** What a link is for. Changes nothing. */
+export async function getUnsubscribeInfo(token: string, signal?: AbortSignal): Promise<UnsubscribeResult> {
+  return (await requestJson(
+    "/api/unsubscribe",
+    { ...unsubscribeOptions("GET"), query: new URLSearchParams({ token }) },
+    signal,
+  )) as UnsubscribeResult;
+}
+
+/** Unsubscribe. Safe to repeat. */
+export async function confirmUnsubscribe(token: string): Promise<UnsubscribeResult> {
+  return (await requestJson("/api/unsubscribe", unsubscribeOptions("POST", { token }))) as UnsubscribeResult;
 }

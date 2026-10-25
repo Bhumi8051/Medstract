@@ -17,16 +17,17 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 
-from app.db_models import ResearchSubscription
-from app.models import DigestOut, DigestRequest, EmailStatusOut, TestSendOut
+from app.db_models import DigestDelivery, ResearchSubscription
+from app.models import DigestDeliveryOut, DigestOut, DigestRequest, EmailStatusOut, TestSendOut
 from app.routers.analysis import get_report_generator
 from app.routers.deps import DB, AppSettings, CSRFProtected, CurrentUser, get_ai_usage_guard, get_utc_now
 from app.routers.errors import email_http_error, pubmed_http_error
 from app.routers.search import get_pubmed_client, get_today
 from app.services.auth import SlidingWindowLimiter
+from app.services.delivery import scheduled_delivery_active
 from app.services.digest import DigestContext, build_digest
 from app.services.digest_render import render_html, render_text
 from app.services.email import EmailError, EmailMessage, EmailSender
@@ -108,7 +109,46 @@ async def email_status(user: CurrentUser, settings: AppSettings) -> EmailStatusO
         sender=settings.email_from,
         test_sender=TEST_SENDER_DOMAIN in settings.email_from.lower(),
         sends_per_hour=settings.email_test_sends_per_hour,
+        delivery_mode=settings.digest_delivery_mode,
+        scheduler_enabled=settings.digest_scheduler_enabled,
+        automatic_delivery_active=scheduled_delivery_active(settings, user.email),
     )
+
+
+@router.get("/deliveries", response_model=list[DigestDeliveryOut])
+async def delivery_history(
+    user: CurrentUser,
+    db: DB,
+    subscription_id: uuid.UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+) -> list[DigestDeliveryOut]:
+    """The signed-in user's scheduled digest runs, newest first. Never includes email content or addresses."""
+    query = (
+        select(DigestDelivery, ResearchSubscription.topic)
+        .join(ResearchSubscription, ResearchSubscription.id == DigestDelivery.subscription_id)
+        .where(DigestDelivery.user_id == user.id)
+        .order_by(DigestDelivery.scheduled_for.desc(), DigestDelivery.created_at.desc())
+        .limit(limit)
+    )
+    if subscription_id is not None:
+        query = query.where(DigestDelivery.subscription_id == subscription_id)
+    return [
+        DigestDeliveryOut(
+            id=d.id,
+            subscription_id=d.subscription_id,
+            topic=topic,
+            scheduled_for=d.scheduled_for,
+            status=d.status,
+            reason=d.error_code,
+            attempts=d.attempts,
+            papers_count=d.papers_count,
+            window_start=d.window_start,
+            window_end=d.window_end,
+            sent_at=d.sent_at,
+            mode=d.mode,
+        )
+        for d, topic in (await db.execute(query)).all()
+    ]
 
 
 @router.post("/preview", response_model=DigestOut, dependencies=[CSRFProtected])

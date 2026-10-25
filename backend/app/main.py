@@ -1,5 +1,6 @@
 """FastAPI application entry point. Run with: uvicorn app.main:app --reload --port 8010"""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -11,14 +12,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings, get_settings
 from app.db import create_engine, create_sessionmaker
 from app.logging_setup import install_log_redaction
-from app.routers import account, analysis, auth, digests, search, subscriptions
+from app.scheduler import DigestScheduler
+from app.routers import account, analysis, auth, digests, search, subscriptions, unsubscribe
 from app.services.auth import LoginThrottle, SlidingWindowLimiter
+from app.services.delivery import DeliveryEngine
 from app.services.email import ResendEmailSender
 from app.services.gemini import GeminiReportGenerator
 from app.services.pubmed import PubMedClient
 
 # http(s)://localhost, 127.0.0.1 or [::1], on any port (or none). Anchored so
 # look-alikes such as http://localhost.evil.example don't match.
+logger = logging.getLogger(__name__)
+
 LOCAL_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
 
 
@@ -53,9 +58,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # starts (and search works) even if the database is down.
         engine = create_engine(settings)
         app.state.db_sessionmaker = create_sessionmaker(engine)
+        # Scheduled digests (Step D): only when explicitly switched on. Even then,
+        # DIGEST_DELIVERY_MODE (default "off") decides whether ticks do anything.
+        scheduler = None
+        if settings.digest_scheduler_enabled:
+            delivery = DeliveryEngine(
+                app.state.db_sessionmaker,
+                settings,
+                app.state.pubmed_client,
+                app.state.report_generator,
+                app.state.email_sender,
+            )
+            scheduler = DigestScheduler(engine, delivery, settings.digest_tick_seconds)
+            scheduler.start()
+            logger.warning(
+                "Digest scheduler started (mode=%s, every %ss)", settings.digest_delivery_mode, settings.digest_tick_seconds
+            )
+        app.state.digest_scheduler = scheduler
         try:
             yield
         finally:
+            if scheduler is not None:
+                await scheduler.stop()
             await app.state.report_generator.aclose()
             await engine.dispose()
 
@@ -76,14 +100,30 @@ app.state.register_ip_limiter = SlidingWindowLimiter(
 )
 app.state.ai_burst_limiter = SlidingWindowLimiter(_settings.ai_burst_per_minute, 60)
 app.state.email_test_limiter = SlidingWindowLimiter(_settings.email_test_sends_per_hour, 3600)
+app.state.unsubscribe_ip_limiter = SlidingWindowLimiter(
+    _settings.unsubscribe_ip_max_invalid, _settings.unsubscribe_ip_window_seconds
+)
 app.include_router(search.router)
 app.include_router(analysis.router)
 app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(subscriptions.router)
 app.include_router(digests.router)
+app.include_router(unsubscribe.router)
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict:
+    """Liveness plus the digest scheduler's state. "status" is always "ok" while the API
+    is up (dev.sh relies on that); check digest_scheduler.stale / last_error for problems."""
+    settings = get_settings()
+    scheduler: DigestScheduler | None = getattr(app.state, "digest_scheduler", None)
+    digest = {
+        "enabled": settings.digest_scheduler_enabled,
+        "mode": settings.digest_delivery_mode,
+        "running": False,
+        "stale": False,
+    }
+    if scheduler is not None:
+        digest.update(scheduler.health())
+    return {"status": "ok", "digest_scheduler": digest}

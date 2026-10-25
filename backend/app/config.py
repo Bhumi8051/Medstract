@@ -112,6 +112,40 @@ class Settings(BaseSettings):
     email_test_sends_per_hour: int = Field(default=5, ge=1, le=100)
     email_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
 
+    # Scheduled digests (Step D). Both switches default to OFF.
+    #   off       - nothing is scheduled, built or sent
+    #   dry_run   - digests are built and stored, never sent
+    #   allowlist - real emails, but only to EMAIL_TEST_RECIPIENTS (also needs
+    #               EMAIL_ENABLED=true and RESEND_API_KEY); everyone else is skipped
+    # There is deliberately no unrestricted "live" mode yet.
+    digest_delivery_mode: Literal["off", "dry_run", "allowlist"] = "off"
+    # Run the scheduler loop inside the backend process. Off by default; the
+    # `python -m app.jobs.digests run-once` command works either way.
+    digest_scheduler_enabled: bool = False
+    digest_tick_seconds: int = Field(default=60, ge=10, le=3600)
+    digest_max_per_tick: int = Field(default=10, ge=1, le=100)
+    # Gemini requests per tick (one per digest). Also capped by AI_DAILY_LIMIT_TOTAL.
+    digest_max_ai_calls_per_tick: int = Field(default=5, ge=0, le=50)
+    # Dry runs use abstract excerpts unless this is true (saves Gemini quota).
+    digest_dry_run_use_ai: bool = False
+    # How long a worker may hold a claimed delivery before another may recover it.
+    digest_lease_seconds: int = Field(default=600, ge=60, le=3600)
+    digest_max_attempts: int = Field(default=4, ge=1, le=10)
+    # Retrying with the same idempotency key is only safe while the provider still
+    # remembers it (Resend: 24 hours, checked October 2026). Keep a margin below it.
+    digest_safe_retry_hours: float = Field(default=23.0, gt=0, le=23.5)
+
+    # Public addresses used in scheduled emails (Step D unsubscribe links).
+    # PUBLIC_APP_URL: the frontend (the /unsubscribe confirmation page).
+    # PUBLIC_API_URL: this backend (the one-click unsubscribe endpoint). Mail
+    # providers only offer one-click unsubscribe for https:// addresses, so the
+    # List-Unsubscribe-Post header is added only when this is https.
+    public_app_url: str = "http://localhost:3000"
+    public_api_url: str = "http://localhost:8010"
+    # Invalid unsubscribe tokens allowed per IP per window (in memory, like the login limits).
+    unsubscribe_ip_max_invalid: int = Field(default=30, ge=1, le=1000)
+    unsubscribe_ip_window_seconds: int = Field(default=600, ge=10)
+
     @model_validator(mode="after")
     def _samesite_none_requires_secure(self) -> "Settings":
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:

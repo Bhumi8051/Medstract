@@ -1,7 +1,7 @@
 """Pydantic models describing the data our API accepts and returns."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -372,9 +372,16 @@ class SubscriptionOut(BaseModel):
     email_when_no_new_papers: bool
     delivery_active: bool = Field(
         default=False,
-        description="Always false for now: there is no scheduler, so nothing is sent automatically "
-        "(Step D). email_enabled is only a stored preference. Manual test emails are separate "
-        "(/api/digests/test-send).",
+        description="True only if scheduled digests would actually be emailed to this user now: email on, "
+        "not unsubscribed, the scheduler running in allowlist mode and this account's address allowlisted. "
+        "Manual test emails are separate (/api/digests/test-send).",
+    )
+    next_run_at: datetime | None = Field(
+        default=None, description="Next scheduled digest (UTC); null while email is off or unsubscribed."
+    )
+    last_sent_at: datetime | None = Field(default=None, description="Last scheduled digest the provider accepted.")
+    unsubscribed_at: datetime | None = Field(
+        default=None, description="Set when an email unsubscribe link was used; cleared by turning email back on."
     )
     created_at: datetime
     updated_at: datetime
@@ -413,6 +420,7 @@ class DigestAiStatus(StrEnum):
     LIMIT_REACHED = "limit_reached"  # daily AI allowance used up: abstract excerpts instead
     FAILED = "failed"  # Gemini error or unusable output (refunded): abstract excerpts instead
     NOT_NEEDED = "not_needed"  # no paper had an abstract to summarize
+    SKIPPED = "skipped"  # deliberately not requested (scheduled dry runs): abstract excerpts
 
 
 class DigestPaper(BaseModel):
@@ -458,10 +466,51 @@ class EmailStatusOut(BaseModel):
     sender: str
     test_sender: bool = Field(description="Using Resend's onboarding@resend.dev test sender.")
     sends_per_hour: int
-    automatic_delivery_active: bool = Field(default=False, description="Always false: scheduling is Step D.")
+    delivery_mode: Literal["off", "dry_run", "allowlist"] = Field(description="DIGEST_DELIVERY_MODE on the server.")
+    scheduler_enabled: bool = Field(description="DIGEST_SCHEDULER_ENABLED: the scheduler runs inside the backend.")
+    automatic_delivery_active: bool = Field(
+        default=False,
+        description="Scheduled digests would be emailed to this account now (allowlist mode, scheduler on, "
+        "email fully configured and this address allowlisted).",
+    )
 
 
 class TestSendOut(BaseModel):
     sent_to: str
     provider_message_id: str
     digest: DigestOut
+
+
+
+# ---------- Scheduled digest history and unsubscribe (Step D) ----------
+
+
+class DigestDeliveryOut(BaseModel):
+    """One scheduled run, as shown in the user's history. No email content or addresses."""
+
+    id: uuid.UUID
+    subscription_id: uuid.UUID
+    topic: str
+    scheduled_for: datetime
+    status: Literal[
+        "pending", "sending", "sent", "dry_run", "skipped_no_new", "skipped_missed", "skipped_disabled",
+        "failed", "needs_review",
+    ]
+    reason: str | None = Field(description="Short fixed code explaining a skip or failure, e.g. 'unsubscribed'.")
+    attempts: int
+    papers_count: int | None
+    window_start: date | None
+    window_end: date | None
+    sent_at: datetime | None
+    mode: Literal["dry_run", "allowlist"] | None
+
+
+class UnsubscribeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    token: str = Field(max_length=100)
+
+
+class UnsubscribeOut(BaseModel):
+    status: Literal["subscribed", "unsubscribed", "already_unsubscribed"]
+    topic: str

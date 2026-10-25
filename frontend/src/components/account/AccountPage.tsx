@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { SubscriptionList } from "@/components/subscriptions/SubscriptionList";
 
+import { DeliveryHistory } from "./DeliveryHistory";
 import { PreferencesForm } from "./PreferencesForm";
 import { SavedSearchList } from "./SavedSearchList";
 import { TestDigestPanel } from "./TestDigestPanel";
@@ -75,6 +76,7 @@ export function AccountPage() {
       <PreferencesForm key={account.user.id} />
       <SavedSearchList key={`saved-${account.user.id}`} />
       <SubscriptionList />
+      <DeliveryHistory key={`history-${account.user.id}`} />
       <TestDigestPanel key={`digest-${account.user.id}`} />
     </div>
   );

@@ -52,6 +52,38 @@ def redact(text: str, secrets: list[str] | None = None) -> str:
     return _URL_PASSWORD_RE.sub(lambda m: f"{m.group(1)}{REDACTED}{m.group(3)}", text)
 
 
+def _redact_value(value):
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    text = str(value)
+    redacted = redact(text)
+    return redacted if isinstance(value, str) or redacted != text else value
+
+
+def _redact_record(record: logging.LogRecord, message: str) -> None:
+    """Redact in place, keeping msg/args separate where possible.
+
+    Some formatters read record.args directly (uvicorn's access log unpacks
+    them), so args are redacted one by one rather than dropped. If that doesn't
+    fully hide the secret (e.g. it was split across arguments), fall back to the
+    pre-rendered, redacted message with no args.
+    """
+    try:
+        if isinstance(record.args, dict):
+            new_args = {k: _redact_value(v) for k, v in record.args.items()}
+        else:
+            new_args = tuple(_redact_value(a) for a in (record.args or ()))
+        new_msg = redact(record.msg) if isinstance(record.msg, str) else record.msg
+        rendered = (new_msg % new_args) if new_args else str(new_msg)
+        if redact(rendered) == rendered:
+            record.msg, record.args = new_msg, new_args or None
+            return
+    except Exception:  # noqa: BLE001 - fall back to the safe form below
+        pass
+    record.msg = redact(message)
+    record.args = None
+
+
 def install_log_redaction(settings: Settings) -> None:
     """Install once at startup (idempotent; later calls just refresh the secret list)."""
     _installed_secrets[:] = _secret_values(settings)
@@ -70,8 +102,8 @@ def install_log_redaction(settings: Settings) -> None:
             message = record.getMessage()
         except Exception:  # noqa: BLE001 - malformed format args: leave the record alone
             return record
-        record.msg = redact(message)
-        record.args = None
+        if redact(message) != message:
+            _redact_record(record, message)
         if record.exc_info and record.exc_info[0] is not None:
             # Pre-render the traceback so formatters print the redacted version.
             record.exc_text = redact("".join(traceback.format_exception(*record.exc_info)).rstrip())

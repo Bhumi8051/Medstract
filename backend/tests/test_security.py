@@ -501,3 +501,28 @@ def test_retry_after_is_readable_by_the_frontend(ai):
     )
     assert blocked.status_code == 429
     assert "retry-after" in blocked.headers.get("access-control-expose-headers", "").lower()
+
+
+def test_uvicorn_access_log_lines_still_format_and_hide_tokens(capsys):
+    """Redaction used to drop record.args, which uvicorn's AccessFormatter unpacks:
+    every access-log line became a 'Logging error' traceback. Args are now redacted in place."""
+    import sys
+
+    from uvicorn.logging import AccessFormatter
+
+    install_log_redaction(make_settings())
+    try:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False))
+        logger = logging.getLogger("uvicorn.access.test")
+        logger.handlers, logger.propagate = [handler], False
+        token = "Q" * 43
+        logger.warning('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "POST", f"/api/unsubscribe/one-click?token={token}", "1.1", 200)
+        logger.warning('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET", "/health", "1.1", 200)
+        out = capsys.readouterr()
+        assert "Logging error" not in out.err and "Traceback" not in out.err
+        assert f'127.0.0.1:5000 - "POST /api/unsubscribe/one-click?token={REDACTED} HTTP/1.1" 200' in out.out
+        assert '127.0.0.1:5000 - "GET /health HTTP/1.1" 200' in out.out
+        assert token not in out.out
+    finally:
+        install_log_redaction(get_settings())

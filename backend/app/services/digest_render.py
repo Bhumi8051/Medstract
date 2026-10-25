@@ -60,6 +60,12 @@ def _paper_html(paper: DigestPaper) -> str:
     )
 
 
+SCHEDULED_NOTICE = (
+    "This is your scheduled research digest. Automatic delivery is in a limited test: "
+    "it only goes to approved addresses."
+)
+
+
 def _section_html(section: DigestSection) -> str:
     meta = f"{section.window} · {LEVEL_LABELS[section.reading_level]} reading level · {len(section.papers)} papers"
     parts = [
@@ -71,27 +77,53 @@ def _section_html(section: DigestSection) -> str:
             '<p style="margin:0 0 12px;padding:8px 12px;background:#fef3c7;border-radius:6px;font-size:13px;">'
             f"{_e(section.ai_note)}</p>"
         )
-    if not section.papers:
+    if not section.papers and not section.ai_note:
         parts.append(f'<p style="{_MUTED}">No PubMed papers matched this topic.</p>')
     parts.extend(_paper_html(p) for p in section.papers)
     return "".join(parts)
 
 
-def render_html(digest: DigestOut) -> str:
+def _footer_html(unsubscribe_url: str | None, manage_url: str | None) -> str:
+    # Both URLs come from our own settings (PUBLIC_APP_URL), not from PubMed or
+    # Gemini, so http://localhost is allowed here (unlike paper links).
+    links = [
+        f'<a href="{_e(url)}" style="color:#0f766e;">{label}</a>'
+        for url, label in ((unsubscribe_url, "Unsubscribe from this topic"), (manage_url, "Manage your subscriptions"))
+        if url
+    ]
+    if not links:
+        return ""
+    return f'<p style="margin:16px 0 0;font-size:12px;{_MUTED}">{" · ".join(links)}</p>'
+
+
+def render_html(
+    digest: DigestOut,
+    notice: str = TEST_NOTICE,
+    *,
+    unsubscribe_url: str | None = None,
+    manage_url: str | None = None,
+) -> str:
     return (
         "<!doctype html><html><body "
         f'style="margin:0;padding:24px;background:#f8fafc;color:#0f172a;{_FONT}line-height:1.5;">'
         '<div style="max-width:640px;margin:0 auto;background:#ffffff;padding:24px;border-radius:12px;">'
         f'<h1 style="margin:0;font-size:22px;">{_e(digest.subject)}</h1>'
-        f'<p style="margin:8px 0 0;padding:8px 12px;background:#e0f2fe;border-radius:6px;font-size:13px;">{_e(TEST_NOTICE)}</p>'
+        f'<p style="margin:8px 0 0;padding:8px 12px;background:#e0f2fe;border-radius:6px;font-size:13px;">{_e(notice)}</p>'
         + "".join(_section_html(s) for s in digest.sections)
         + f'<p style="margin:24px 0 0;font-size:12px;{_MUTED}">{_e(SOURCE_NOTE)} {_e(digest.disclaimer)}</p>'
-        "</div></body></html>"
+        + _footer_html(unsubscribe_url, manage_url)
+        + "</div></body></html>"
     )
 
 
-def render_text(digest: DigestOut) -> str:
-    lines = [digest.subject, "", TEST_NOTICE, ""]
+def render_text(
+    digest: DigestOut,
+    notice: str = TEST_NOTICE,
+    *,
+    unsubscribe_url: str | None = None,
+    manage_url: str | None = None,
+) -> str:
+    lines = [digest.subject, "", notice, ""]
     for section in digest.sections:
         lines += [
             "=" * 60,
@@ -101,7 +133,7 @@ def render_text(digest: DigestOut) -> str:
         if section.ai_note and section.ai_status is not DigestAiStatus.GENERATED:
             lines.append(section.ai_note)
         lines.append("")
-        if not section.papers:
+        if not section.papers and not section.ai_note:
             lines += ["No PubMed papers matched this topic.", ""]
         for paper in section.papers:
             lines.append(paper.title)
@@ -119,4 +151,8 @@ def render_text(digest: DigestOut) -> str:
                     lines.append(f"From the abstract: {paper.abstract_excerpt}")
             lines.append("")
     lines += ["-" * 60, SOURCE_NOTE, digest.disclaimer]
+    if unsubscribe_url:
+        lines.append(f"Unsubscribe from this topic: {unsubscribe_url}")
+    if manage_url:
+        lines.append(f"Manage your subscriptions: {manage_url}")
     return "\n".join(lines)

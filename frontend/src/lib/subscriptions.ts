@@ -34,8 +34,11 @@ export interface Subscription extends SubscriptionSettings {
   id: string;
   createdAt: string;
   updatedAt: string;
-  /** From the server; always false until delivery exists. */
+  /** From the server: the scheduler would really email this subscription now. */
   deliveryActive: boolean;
+  nextRunAt: string | null;
+  lastSentAt: string | null;
+  unsubscribedAt: string | null;
 }
 
 export const TOPIC_MIN_LENGTH = 2;
@@ -205,6 +208,9 @@ export function fromSubscriptionApi(api: SubscriptionApi): Subscription {
     emailWhenNoNewPapers: api.email_when_no_new_papers,
     autoEmail: api.email_enabled,
     deliveryActive: api.delivery_active,
+    nextRunAt: api.next_run_at,
+    lastSentAt: api.last_sent_at,
+    unsubscribedAt: api.unsubscribed_at,
     createdAt: api.created_at,
     updatedAt: api.updated_at,
   };

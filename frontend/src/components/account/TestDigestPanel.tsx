@@ -227,6 +227,15 @@ function EmailReadiness({ status, error, onRetry }: { status: EmailStatus | null
       {!allOk && (
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Restart the backend after editing backend/.env.</p>
       )}
+      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400" data-testid="scheduled-mode">
+        Scheduled digests:{" "}
+        {status.automatic_delivery_active
+          ? "on (test mode: approved addresses only)"
+          : status.delivery_mode === "dry_run"
+            ? "dry run only (built, never sent)"
+            : "off"}
+        .
+      </p>
       {status.test_sender && (
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Using Resend&rsquo;s test sender: it only delivers to the email address you signed up to Resend with.

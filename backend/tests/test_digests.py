@@ -175,6 +175,8 @@ def test_email_status_never_reveals_the_key(env):
         "sender": "Healthcare Research Agent <onboarding@resend.dev>",
         "test_sender": True,
         "sends_per_hour": 5,
+        "delivery_mode": "off",
+        "scheduler_enabled": False,
         "automatic_delivery_active": False,
     }
     assert KEY not in response.text

@@ -26,11 +26,12 @@ This file records what has been built, milestone by milestone, and the decisions
 | Maintenance | `dev.sh`, README, CORS, first commit | 128 | `2fc0d01` |
 | Milestone 4 | Gemini paper analysis | 190 | `071da4d` |
 | Milestone 5 | Accounts, preferences, saved searches | 251 | `96fd5b6` |
-| Step A | Persistent research subscriptions | 301 | branch `feature/research-subscriptions`, not committed yet |
-| Step B | Security hardening (AI login, usage limits, log redaction) | 338 | same branch, not committed yet |
-| Step C | Manual test email digests (Resend) | 397 | same branch, not committed yet |
+| Step A | Persistent research subscriptions | 301 | `f9ef312` (branch `feature/research-subscriptions`) |
+| Step B | Security hardening (AI login, usage limits, log redaction) | 338 | `f9ef312` |
+| Step C | Manual test email digests (Resend) | 397 | `f9ef312` |
+| Step D | Scheduled digest delivery (test modes only, off by default) | see PROJECT_DOCUMENTATION.txt §9 | same branch, not committed yet |
 
-Commits up to `96fd5b6` are on `main` and on GitHub (`Bhumi8051/Healthcare-Research`). The Step A–C work is on `feature/research-subscriptions`, which has never been pushed.
+Commits up to `96fd5b6` are on `main` and on GitHub (`Bhumi8051/Healthcare-Research`). Steps A–C are commit `f9ef312` on `feature/research-subscriptions`, which has never been pushed. Step D is uncommitted work on that branch.
 
 ---
 
@@ -164,7 +165,18 @@ Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sect
   - Each topic gets a PubMed search and one Gemini request summarizing its papers. Summaries are checked against the abstracts, and abstract excerpts are used if AI isn't available.
   - Safety: email is off unless `EMAIL_ENABLED=true`. The recipient is always your own account email, which must be in `EMAIL_TEST_RECIPIENTS`. Sends are limited per hour.
   - **A real test email was delivered on 2026-10-25 (UTC).**
-- **Not built yet (Step D):** automatic daily, weekly or monthly delivery. Nothing is sent on a subscription's schedule.
+- **Step D, scheduled delivery (uncommitted):**
+  - **Off by default.** The modes are `off`, `dry_run` (built, never sent) and `allowlist` (approved addresses only). There's no mode that emails everyone.
+  - **How it works:** PostgreSQL is the job queue, and each run of each subscription exists once.
+    - Each email is frozen before it's sent, and retries use an idempotency key.
+    - An email that *might* have gone out is never resent automatically; it's marked "needs review".
+    - The papers already sent are tracked, so later digests only show new ones.
+  - **Unsubscribing:** every email has its own unsubscribe link, and only a hash of the token is stored. Unsubscribing needs no login and is safe to repeat. One-click unsubscribe in mail apps needs https and a verified domain.
+  - **Tools:**
+    - `python -m app.jobs.digests` commands: `status`, `run-once --dry-run`, `review` and `resolve`.
+    - `/health` shows the scheduler's heartbeat.
+    - `/account` shows each subscription's status and the delivery history.
+  - **Guide:** [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md). No scheduled email has been sent yet.
 
 ---
 
@@ -181,12 +193,12 @@ Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sect
 
 ```bash
 ./dev.sh                                                  # backend :8010 + frontend :3000
-cd backend && .venv/bin/python -m pytest                  # 397 tests + 1 opt-in live test (PostgreSQL must be running)
+cd backend && .venv/bin/python -m pytest                  # full suite + 1 opt-in live test (PostgreSQL must be running)
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
 
 ## Not done yet
 
 - **Milestone 6:** deployment and production settings, including `SESSION_COOKIE_SECURE=true` and turning off local CORS.
-- **Step D:** automatic (scheduled) email digests. Needs a scheduler, a record of papers already sent, and a verified sending domain to email anyone other than the Resend account owner.
+- **Sending scheduled digests to real users:** this needs account email verification, a verified sending domain (DKIM), https addresses and an always-on host. Step D stops at test modes.
 - **Later:** password reset, email verification, account deletion in the UI, caching of AI analyses.

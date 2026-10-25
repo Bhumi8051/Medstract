@@ -1,4 +1,4 @@
-<img src="frontend/public/logo.svg" width="180"><img src="frontend/public/medstract.svg" width="750">
+<img src="frontend/public/logo.svg" width="120"><img src="frontend/public/medstract.svg" width="620">
 
 <h3 align="center"><i>Medical research made readable</i></h3>
 

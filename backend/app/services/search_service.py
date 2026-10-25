@@ -3,7 +3,7 @@
 from datetime import date
 
 from app.config import Settings
-from app.models import ArticleType, Language, Period, SearchResponse
+from app.models import ArticleType, Period, SearchResponse
 from app.services.dates import has_known_date, paper_matches_date_range
 from app.services.dedup import deduplicate_papers
 from app.services.filters import build_pubmed_term
@@ -28,13 +28,11 @@ async def search_papers(
     include_undated: bool = False,
     period: Period = Period.ALL,
     article_types: list[ArticleType] | None = None,
-    languages: list[Language] | None = None,
 ) -> SearchResponse:
     """Run a search. start_date/end_date are the effective range (period already applied)."""
     warnings: list[str] = []
     article_types = list(dict.fromkeys(article_types or []))
-    languages = list(dict.fromkeys(languages or []))
-    pubmed_term = build_pubmed_term(query, article_types, languages)
+    pubmed_term = build_pubmed_term(query, article_types)
 
     total, pmids = await client.esearch(
         pubmed_term, candidate_pool_size(max_results, settings), start_date, end_date
@@ -78,7 +76,6 @@ async def search_papers(
         end_date=end_date.isoformat() if end_date else None,
         period=period,
         article_types=article_types,
-        languages=languages,
         pubmed_query=pubmed_term,
         duplicates_removed=duplicates_removed,
         excluded_by_date=excluded_by_date,

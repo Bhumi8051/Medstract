@@ -141,7 +141,7 @@ def test_upstream_failures_map_to_clear_status_codes(api, handler, status):
     assert "detail" in response.json()
 
 
-# ---------- period, article type and language filters ----------
+# ---------- period and article type filters ----------
 
 
 def _recording_handler(esearch: dict, efetch: str):
@@ -206,23 +206,26 @@ def test_period_not_overlapping_range_returns_422(api, pinned_today):
     assert "does not overlap" in response.json()["detail"]
 
 
-def test_article_type_and_language_filters_reach_pubmed(api):
+def test_article_type_filters_reach_pubmed(api):
     handler, seen = _recording_handler(esearch_json([]), efetch_xml())
     response = api(handler).get(
         "/api/search",
-        params=[
-            ("q", "asthma"),
-            ("article_type", "review"),
-            ("article_type", "meta_analysis"),
-            ("language", "english"),
-        ],
+        params=[("q", "asthma"), ("article_type", "review"), ("article_type", "meta_analysis")],
     )
     data = response.json()
-    expected = '(asthma) AND ("Review"[pt] OR "Meta-Analysis"[pt]) AND (english[la])'
+    expected = '(asthma) AND ("Review"[pt] OR "Meta-Analysis"[pt])'
     assert seen[0]["term"] == expected
     assert data["pubmed_query"] == expected
     assert data["article_types"] == ["review", "meta_analysis"]
-    assert data["languages"] == ["english"]
+
+
+def test_language_filter_was_removed_and_is_ignored(api):
+    """The language option is gone: an old client's language= parameter is ignored, never sent to PubMed."""
+    handler, seen = _recording_handler(esearch_json([]), efetch_xml())
+    response = api(handler).get("/api/search", params=[("q", "asthma"), ("language", "english")])
+    assert response.status_code == 200
+    assert "[la]" not in seen[0]["term"] and seen[0]["term"] == "(asthma)"
+    assert "languages" not in response.json()
 
 
 def test_filters_do_not_affect_ranking_terms(api):
@@ -238,7 +241,6 @@ def test_filters_do_not_affect_ranking_terms(api):
     [
         {"q": "asthma", "period": "year"},
         {"q": "asthma", "article_type": "opinion"},
-        {"q": "asthma", "language": "klingon"},
         {"q": "asthma", "article_type": "Review"},  # values are case-sensitive slugs
     ],
 )
@@ -332,4 +334,4 @@ def test_real_app_allows_frontend_dev_origin(api):
 
 
 def test_health(api):
-    assert api(pubmed_handler(esearch_json([]), efetch_xml())).get("/health").json() == {"status": "ok"}
+    assert api(pubmed_handler(esearch_json([]), efetch_xml())).get("/health").json()["status"] == "ok"

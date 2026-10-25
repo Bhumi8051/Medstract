@@ -5,8 +5,9 @@ answers 404 (not 403), so its existence isn't revealed.
 """
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
 
 from app.db_models import SavedSearch
@@ -17,10 +18,12 @@ from app.models import (
     SavedSearchCreate,
     SavedSearchFilters,
     SavedSearchOut,
+    AiUsageOut,
     SummaryLevel,
 )
 from app.routers.auth import load_preferences
-from app.routers.deps import DB, CSRFProtected, CurrentUser
+from app.routers.deps import DB, CSRFProtected, CurrentUser, get_ai_usage_guard
+from app.services.usage import AiUsageGuard
 
 router = APIRouter(prefix="/api", tags=["account"])
 
@@ -64,6 +67,18 @@ async def update_preferences(body: PreferencesIn, user: CurrentUser, db: DB) -> 
     preferences.research_interests = body.research_interests
     await db.commit()
     return PreferencesOut(summary_level=body.summary_level, research_interests=body.research_interests)
+
+
+# ---------- AI usage ----------
+
+
+@router.get("/me/ai-usage", response_model=AiUsageOut)
+async def get_ai_usage(user: CurrentUser, usage: Annotated[AiUsageGuard, Depends(get_ai_usage_guard)]) -> AiUsageOut:
+    """Today's AI analysis allowance (UTC day). Enforcement happens on the server in the analyze endpoint."""
+    snapshot = await usage.snapshot(user.id)
+    return AiUsageOut(
+        used=snapshot.used, limit=snapshot.limit, remaining=snapshot.remaining, resets_at=snapshot.resets_at
+    )
 
 
 # ---------- saved searches ----------

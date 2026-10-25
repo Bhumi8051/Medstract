@@ -67,9 +67,10 @@ export function PreferencesForm() {
   return (
     <section
       aria-labelledby={`${baseId}-title`}
-      className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-800 dark:bg-slate-900"
+      id="preferences"
+      className="scroll-mt-6 rounded-2xl border border-navy-200 bg-white p-6 shadow-sm sm:p-8 dark:border-navy-800 dark:bg-navy-900"
     >
-      <h2 id={`${baseId}-title`} className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+      <h2 id={`${baseId}-title`} className="text-lg font-semibold text-navy-900 dark:text-navy-50">
         Research preferences
       </h2>
       <form onSubmit={handleSubmit} className="mt-4 space-y-6">
@@ -85,10 +86,10 @@ export function PreferencesForm() {
         />
 
         <div>
-          <label htmlFor={`${baseId}-interest`} className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          <label htmlFor={`${baseId}-interest`} className="text-xs font-semibold tracking-wide text-navy-500 uppercase dark:text-navy-400">
             Research interests
           </label>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
             Shown as one-click searches on the home page ({interests.length}/{MAX_INTERESTS}).
           </p>
           <div className="mt-2 flex gap-2">
@@ -104,12 +105,12 @@ export function PreferencesForm() {
               onKeyDown={handleDraftKey}
               aria-invalid={Boolean(draftError)}
               aria-describedby={draftError ? `${baseId}-interest-error` : undefined}
-              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="min-w-0 flex-1 rounded-md border border-navy-300 bg-white px-3 py-2 text-sm text-navy-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-navy-700 dark:bg-navy-950 dark:text-navy-100"
             />
             <button
               type="button"
               onClick={addInterest}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 hover:border-teal-600 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:border-slate-700 dark:text-slate-100"
+              className="rounded-md border border-navy-300 px-3 py-2 text-sm font-medium text-navy-800 hover:border-brand-600 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:border-navy-700 dark:text-navy-100"
             >
               Add
             </button>
@@ -129,7 +130,7 @@ export function PreferencesForm() {
                       setInterests(interests.filter((i) => i !== interest));
                       setStatus({ kind: "idle" });
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 py-1 pr-2 pl-3 text-sm text-teal-900 hover:border-teal-400 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:border-teal-900 dark:bg-teal-950 dark:text-teal-200"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pr-2 pl-3 text-sm text-brand-900 hover:border-brand-400 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:border-brand-900 dark:bg-brand-950 dark:text-brand-200"
                   >
                     {interest}
                     <span aria-hidden="true">×</span>
@@ -139,7 +140,7 @@ export function PreferencesForm() {
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-slate-500 italic dark:text-slate-400">No interests yet.</p>
+            <p className="mt-3 text-sm text-navy-500 italic dark:text-navy-400">No interests yet.</p>
           )}
         </div>
 
@@ -147,12 +148,12 @@ export function PreferencesForm() {
           <button
             type="submit"
             disabled={status.kind === "saving"}
-            className="rounded-lg bg-teal-700 px-5 py-2 font-semibold text-white hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-70"
+            className="rounded-lg bg-brand-700 px-5 py-2 font-semibold text-white hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-70"
           >
             {status.kind === "saving" ? "Saving…" : "Save preferences"}
           </button>
           <p role="status" className="text-sm">
-            {status.kind === "saved" && <span className="text-teal-800 dark:text-teal-300">Preferences saved.</span>}
+            {status.kind === "saved" && <span className="text-brand-800 dark:text-brand-300">Preferences saved.</span>}
             {status.kind === "error" && <span className="text-red-700 dark:text-red-400">{status.message}</span>}
           </p>
         </div>

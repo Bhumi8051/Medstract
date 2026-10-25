@@ -15,7 +15,7 @@ export function CheckboxGroup<T extends string>({ legend, options, selected, onT
   const baseId = useId();
   return (
     <fieldset>
-      <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">{legend}</legend>
+      <legend className="text-sm font-semibold text-navy-900 dark:text-navy-100">{legend}</legend>
       <ul className="mt-2 space-y-1.5">
         {options.map((option) => {
           const id = `${baseId}-${option.value}`;
@@ -26,9 +26,9 @@ export function CheckboxGroup<T extends string>({ legend, options, selected, onT
                 type="checkbox"
                 checked={selected.includes(option.value)}
                 onChange={() => onToggle(option.value)}
-                className="size-4 rounded border-slate-300 accent-teal-700"
+                className="size-4 rounded border-navy-300 accent-brand-700"
               />
-              <label htmlFor={id} className="text-sm text-slate-700 dark:text-slate-300">
+              <label htmlFor={id} className="text-sm text-navy-700 dark:text-navy-300">
                 {option.label}
               </label>
             </li>

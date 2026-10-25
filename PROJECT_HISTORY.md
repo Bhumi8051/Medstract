@@ -25,9 +25,14 @@ This file records what has been built, milestone by milestone, and the decisions
 | Product update | Hero search, period, filter sidebar, summary level | 116 | `2fc0d01` |
 | Maintenance | `dev.sh`, README, CORS, first commit | 128 | `2fc0d01` |
 | Milestone 4 | Gemini paper analysis | 190 | `071da4d` |
-| Milestone 5 | Accounts, preferences, saved searches | 251 | not committed yet |
+| Milestone 5 | Accounts, preferences, saved searches | 251 | `96fd5b6` |
+| Step A | Persistent research subscriptions | 301 | `f9ef312` (branch `feature/research-subscriptions`) |
+| Step B | Security hardening (AI login, usage limits, log redaction) | 338 | `f9ef312` |
+| Step C | Manual test email digests (Resend) | 397 | `f9ef312` |
+| Step D | Scheduled digest delivery (test modes only, off by default) | see PROJECT_DOCUMENTATION.txt §9 | `ab7dd30` |
+| Medstract update | Rebrand, light/dark themes, email polish, typed delivery time | 615 | work after `ab7dd30` |
 
-Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi8051/Healthcare-Research`).
+Commits up to `96fd5b6` are on `main` (GitHub: `Bhumi8051/Healthcare-Research`). Steps A–C are commit `f9ef312` and Step D is commit `ab7dd30`, both on branch `feature/research-subscriptions`. Run `git log` and `git status` for the current state of the branch.
 
 ---
 
@@ -145,11 +150,56 @@ Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi80
   - Your preferred summary level is applied when you log in or change it, and interests appear as one-click searches.
 - **Tests:** 54 database tests against `healthcare_research_test`, including a migration round-trip and a check that the models match the migrations. Plus a full browser test of the account flow.
 
+## Research subscriptions and email (branch `feature/research-subscriptions`)
+
+Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sections 4.9, 4.10 and 4.12).
+
+- **Prototype:** a bell beside the search box, "Follow topic" on paper cards, a subscription dialog, and a list on `/account`. UI refined after feedback (uniform controls, a ringing bell, a time dropdown instead of Safari's time input).
+- **Step A, persistent subscriptions:** a `research_subscriptions` table (migration `b4f1c80f6ca2`) and a login-protected `/api/subscriptions` API. Each topic can be followed once per user. Settings are validated on the server, and other users' subscriptions answer 404.
+- **Step B, security hardening:**
+  - AI analysis now requires login.
+  - Daily AI limits (20 per user, 200 overall) are enforced in PostgreSQL (migration `bd806695a174`), and failures are refunded.
+  - Logins and sign-ups are limited per IP, in memory.
+  - API keys and passwords are removed from logs, and PubMed errors shown to users are generic.
+- **Step C, manual test email digests:**
+  - From `/account`, preview a digest for 1–3 subscriptions, or send one test email to yourself through Resend.
+  - Each topic gets a PubMed search and one Gemini request summarizing its papers. Summaries are checked against the abstracts, and abstract excerpts are used if AI isn't available.
+  - Safety: email is off unless `EMAIL_ENABLED=true`. The recipient is always your own account email, which must be in `EMAIL_TEST_RECIPIENTS`. Sends are limited per hour.
+  - **A real test email was delivered on 2026-10-25 (UTC).**
+- **Step D, scheduled delivery:**
+  - **Off by default.** The modes are `off`, `dry_run` (built, never sent) and `allowlist` (approved addresses only). There's no mode that emails everyone.
+  - **How it works:** PostgreSQL is the job queue, and each run of each subscription exists once.
+    - Each email is frozen before it's sent, and retries use an idempotency key.
+    - An email that *might* have gone out is never resent automatically; it's marked "needs review".
+    - The papers already sent are tracked, so later digests only show new ones.
+  - **Unsubscribing:** every email has its own unsubscribe link, and only a hash of the token is stored. Unsubscribing needs no login and is safe to repeat. One-click unsubscribe in mail apps needs https and a verified domain.
+  - **Tools:**
+    - `python -m app.jobs.digests` commands: `status`, `run-once --dry-run`, `review` and `resolve`.
+    - `/health` shows the scheduler's heartbeat.
+    - `/account` shows each subscription's status and the delivery history.
+  - **Guide:** [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md). No scheduled email has been sent yet.
+
+## Medstract update (after Step D)
+
+- **Rebrand:** the app is now called **Medstract**, with its logo and wordmark in the header, a favicon and app icons, and page titles like "Your account · Medstract". Clicking the logo returns to a fresh search page.
+- **Themes:** a light/dark toggle that remembers your choice and otherwise follows the system setting, with no flash on load.
+  - Light theme: warm cream and ivory surfaces.
+  - Dark theme: deep navy surfaces built on a fixed blue palette.
+  - Both themes share one set of colour tokens in `frontend/src/app/globals.css`.
+  - The app uses one font (Geist) throughout.
+- **Layout:** a full-width search band with a settings strip below it, and paper cards with a tinted header row. The account page has a sidebar with jump links to each section.
+- **Search:** the language filter was removed, and the search box placeholder now gives an example query.
+- **Subscriptions:** the delivery time is typed (for example `7:30 PM`) instead of picked from a dropdown. It's validated before saving and stored in the same 24-hour format as before.
+- **Email:**
+  - The sender name is "Medstract" and subjects read "Medstract Research Digest (Test): …".
+  - Every send attempt is logged with a masked address; a success logs Resend's message ID, and a failure logs the error code.
+  - Each digest ends with a "Visit Medstract" link to `PUBLIC_APP_URL` and the time it was sent. The time keeps Gmail from hiding the footer as repeated text.
+
 ---
 
 ## Important things to remember
 
-- **Where secrets live:** only `backend/.env` (NCBI key, Gemini key, database URL). Git ignores it. `frontend/.env.local` holds only the public API URL. Never paste keys into chats or frontend code.
+- **Where secrets live:** only `backend/.env` (NCBI key, Gemini key, Resend key, database URL). Git ignores it. `frontend/.env.local` holds only the public API URL. Never paste keys into chats or frontend code.
 - **After editing `.env`, restart the backend.** `--reload` only watches `.py` files.
 - **"Address already in use"** means a server is already running on that port. Find it with `lsof -nP -iTCP:8010 -sTCP:LISTEN`.
 - **Open the app at `http://localhost:3000`, not `127.0.0.1`,** or the login cookie won't be sent.
@@ -160,11 +210,12 @@ Commits `2fc0d01` and `071da4d` are local. Only `2fc0d01` is on GitHub (`Bhumi80
 
 ```bash
 ./dev.sh                                                  # backend :8010 + frontend :3000
-cd backend && .venv/bin/python -m pytest                  # 251 tests (PostgreSQL must be running)
+cd backend && .venv/bin/python -m pytest                  # full suite + 1 opt-in live test (PostgreSQL must be running)
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
 
 ## Not done yet
 
 - **Milestone 6:** deployment and production settings, including `SESSION_COOKIE_SECURE=true` and turning off local CORS.
-- **Later:** weekly email digests, password reset, email verification, account deletion in the UI, caching of AI analyses.
+- **Sending scheduled digests to real users:** this needs account email verification, a verified sending domain (DKIM), https addresses and an always-on host. Step D stops at test modes.
+- **Later:** password reset, email verification, account deletion in the UI, caching of AI analyses.

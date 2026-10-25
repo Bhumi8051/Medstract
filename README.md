@@ -4,7 +4,7 @@
 
 Researchers waste hours sifting PubMed alerts. Medstract sends a weekly digest of your most relevant new papers, ranked and summarized at your chosen reading level, so you read only what matters.
 
-For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt).
+For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt). For running scheduled digests, see [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md).
 
 - **Backend:** Python, FastAPI and Pydantic, in `backend/`. It calls NCBI E-utilities (ESearch and EFetch).
 - **AI analysis:** Google Gemini, on demand per paper, grounded in the PubMed abstract.
@@ -62,13 +62,48 @@ Real values live in `backend/.env` and `frontend/.env.local`. Git ignores both. 
 
 ## Accounts and security
 
-- **Optional.** Search and paper analysis work without logging in. An account adds saved searches, a default summary level, and research interests, which show up as one-click searches.
+- **Optional for search.** Searching works without logging in; AI paper analysis requires an account (see below). An account also adds saved searches, a default summary level, and research interests, which show up as one-click searches.
 - **Passwords** are hashed with Argon2id; plain-text passwords are never stored or logged. Passwords must be 10–128 characters.
 - **Sessions** use a random token in an HttpOnly, `SameSite=Lax` cookie, which JavaScript can't read. The database stores only a SHA-256 hash of the token. Sessions expire after 14 days, and logging out deletes them on the server.
 - **CSRF protection:** requests that change data must send an `X-Requested-With: fetch` header. The browser only lets the allowed origins send it.
 - **Password-guessing protection:** after 5 failed logins for an email within 15 minutes, further attempts are refused for a while. This counter lives in memory, so it resets when the backend restarts.
+- **AI analysis requires login** and is limited to **20 analyses per user per day** and **200 in total per day** (UTC days, configurable). The limits are enforced atomically in PostgreSQL, and only successful analyses count: failures are refunded. There's also a short-term limit of 5 analyses per minute per user. Search stays public.
+- **Rate limits on logins and sign-ups:** besides the 5-failures-per-email limit, there are at most 20 failed logins per IP per 15 minutes and 5 sign-up attempts per IP per hour. Both answer `429` with a `Retry-After` header. These counters are kept **in memory**, which suits the current single-process development setup but means they're not shared between multiple workers or servers, and they reset when the backend restarts.
+- **Secrets stay out of logs:** HTTP-client loggers are held at WARNING (NCBI requires the API key in the URL), and every log line is filtered to mask `api_key=…` values, database passwords and the configured keys. PubMed errors shown to users are fixed, generic messages.
 - **Users only see their own data.** Another user's saved search answers 404. Deleting a user removes all of their data.
 - **Schema changes go through Alembic.** After changing `app/db_models.py`, run `.venv/bin/alembic revision --autogenerate -m "describe change"`, review the generated file, then run `.venv/bin/alembic upgrade head`. A test fails if the models and migrations drift apart.
+
+## Test email digests (manual only)
+
+From the **/account** page you can preview a research digest for 1–3 of your subscriptions and send **one test email to your own address**. Nothing is sent automatically yet; scheduled daily/weekly/monthly delivery is a later step.
+
+1. Create a free [Resend](https://resend.com) account with **the same email you log in to this app with**. Resend's test sender (`onboarding@resend.dev`) only delivers to that address.
+2. Create an API key with **Sending access** and add it to `backend/.env`. Also add your email to the allowlist and turn sending on:
+   ```
+   RESEND_API_KEY=re_...
+   EMAIL_TEST_RECIPIENTS=you@example.com
+   EMAIL_ENABLED=true
+   ```
+3. Restart the backend. On /account, use **Preview digest** first (it sends nothing), then **Send test email**. Check your inbox and spam folder; the message ID shown matches Resend's dashboard.
+
+Safety: the recipient is always the signed-in account's email (it can't be set in the request), it must be in `EMAIL_TEST_RECIPIENTS`, sending is off unless `EMAIL_ENABLED=true`, and test sends are limited per hour. Each preview or send uses 1 of your daily AI analyses per topic for the summaries; if AI isn't available, the digest uses abstract excerpts instead.
+
+## Scheduled digests (testing only, off by default)
+
+Subscriptions can be delivered automatically on their daily, weekly or monthly schedule. This is still in testing:
+
+- **Modes:**
+  - `DIGEST_DELIVERY_MODE=off` (default): nothing runs.
+  - `dry_run`: digests are built and stored, never sent.
+  - `allowlist`: real emails, but only to `EMAIL_TEST_RECIPIENTS`.
+
+  There's no mode that emails everyone.
+- **Where it runs:** the scheduler runs inside the backend only with `DIGEST_SCHEDULER_ENABLED=true`. Otherwise, run one tick by hand with `cd backend && .venv/bin/python -m app.jobs.digests run-once --dry-run`.
+- **Checking on it:** `python -m app.jobs.digests status` shows the configuration, the next runs, the history and any problems with what to do. `GET /health` shows the scheduler's heartbeat.
+- **Unsubscribing:** every scheduled email has an unsubscribe link (no login needed) and `List-Unsubscribe` headers. One-click unsubscribe in mail apps needs https and a verified sending domain.
+- **On `/account`:** each subscription's status, next run and last delivery, plus the full delivery history.
+
+The setup, dry-run testing, retries, "needs review" deliveries and troubleshooting are all in **[docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md)**.
 
 ## Run
 
@@ -116,4 +151,4 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run build
 
 ## Not yet implemented
 
-Weekly email digests, password reset, email verification, and changing or deleting an account from the UI.
+Scheduled digests to anyone other than allowlisted test addresses (this needs a verified sending domain and account email verification), password reset, email verification, and changing or deleting an account from the UI.

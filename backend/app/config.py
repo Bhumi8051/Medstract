@@ -76,6 +76,77 @@ class Settings(BaseSettings):
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_failure_window_seconds: int = Field(default=900, ge=10)
 
+    # Extra per-IP limits (Step B). These counters live in memory: fine for this
+    # single-process development setup, but NOT shared between multiple workers or
+    # servers, and reset on restart. Use a shared store (e.g. Redis/PostgreSQL) if
+    # the backend is ever run with several workers.
+    login_ip_max_failures: int = Field(default=20, ge=1, le=1000)
+    login_ip_window_seconds: int = Field(default=900, ge=10)
+    register_ip_max_attempts: int = Field(default=5, ge=1, le=1000)
+    register_ip_window_seconds: int = Field(default=3600, ge=10)
+    # Only read X-Forwarded-For when the app sits behind a proxy you control;
+    # otherwise any client could spoof its IP and dodge the limits above.
+    trust_proxy_headers: bool = False
+
+    # Gemini usage caps, enforced atomically in PostgreSQL (ai_usage_daily tables).
+    # Days are UTC. Only successful analyses count; failures are refunded.
+    ai_daily_limit_per_user: int = Field(default=20, ge=1, le=10_000)
+    # All users together; protects the project's free-tier quota. 0 = no overall cap.
+    ai_daily_limit_total: int = Field(default=200, ge=0, le=1_000_000)
+    # Short-term brake against rapid clicking (in memory, per user).
+    ai_burst_per_minute: int = Field(default=5, ge=1, le=600)
+
+    # Email (Step C: manual test digests only; nothing is sent automatically).
+    # Resend API key; SecretStr keeps it out of logs and reprs.
+    resend_api_key: SecretStr | None = None
+    resend_api_url: str = "https://api.resend.com"
+    # Master switch: no email is ever sent unless this is true.
+    email_enabled: bool = False
+    # onboarding@resend.dev is Resend's test sender: it only delivers to the address
+    # that owns the Resend account. Sending to anyone else needs a verified domain.
+    email_from: str = "Medstract <onboarding@resend.dev>"
+    # Comma-separated addresses allowed to receive test digests. Accounts aren't
+    # email-verified, so the account email alone isn't proof of ownership.
+    email_test_recipients: str = ""
+    # Test sends per user per hour (in memory, like the login limits above).
+    email_test_sends_per_hour: int = Field(default=5, ge=1, le=100)
+    email_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
+
+    # Scheduled digests (Step D). Both switches default to OFF.
+    #   off       - nothing is scheduled, built or sent
+    #   dry_run   - digests are built and stored, never sent
+    #   allowlist - real emails, but only to EMAIL_TEST_RECIPIENTS (also needs
+    #               EMAIL_ENABLED=true and RESEND_API_KEY); everyone else is skipped
+    # There is deliberately no unrestricted "live" mode yet.
+    digest_delivery_mode: Literal["off", "dry_run", "allowlist"] = "off"
+    # Run the scheduler loop inside the backend process. Off by default; the
+    # `python -m app.jobs.digests run-once` command works either way.
+    digest_scheduler_enabled: bool = False
+    digest_tick_seconds: int = Field(default=60, ge=10, le=3600)
+    digest_max_per_tick: int = Field(default=10, ge=1, le=100)
+    # Gemini requests per tick (one per digest). Also capped by AI_DAILY_LIMIT_TOTAL.
+    digest_max_ai_calls_per_tick: int = Field(default=5, ge=0, le=50)
+    # Dry runs use abstract excerpts unless this is true (saves Gemini quota).
+    digest_dry_run_use_ai: bool = False
+    # How long a worker may hold a claimed delivery before another may recover it.
+    digest_lease_seconds: int = Field(default=600, ge=60, le=3600)
+    digest_max_attempts: int = Field(default=4, ge=1, le=10)
+    # Retrying with the same idempotency key is only safe while the provider still
+    # remembers it (Resend: 24 hours, checked October 2026). Keep a margin below it.
+    digest_safe_retry_hours: float = Field(default=23.0, gt=0, le=23.5)
+
+    # Public addresses used in scheduled emails (Step D unsubscribe links).
+    # PUBLIC_APP_URL: the frontend (the /unsubscribe confirmation page, and the
+    # "Visit Medstract" link in every digest email's footer). https:// in production.
+    # PUBLIC_API_URL: this backend (the one-click unsubscribe endpoint). Mail
+    # providers only offer one-click unsubscribe for https:// addresses, so the
+    # List-Unsubscribe-Post header is added only when this is https.
+    public_app_url: str = "http://localhost:3000"
+    public_api_url: str = "http://localhost:8010"
+    # Invalid unsubscribe tokens allowed per IP per window (in memory, like the login limits).
+    unsubscribe_ip_max_invalid: int = Field(default=30, ge=1, le=1000)
+    unsubscribe_ip_window_seconds: int = Field(default=600, ge=10)
+
     @model_validator(mode="after")
     def _samesite_none_requires_secure(self) -> "Settings":
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
@@ -88,6 +159,18 @@ class Settings(BaseSettings):
         if self.gemini_api_key is None:
             return None
         return self.gemini_api_key.get_secret_value().strip() or None
+
+    @property
+    def resend_key_value(self) -> str | None:
+        """The Resend key, or None if unset or blank. Only pass this to the email service."""
+        if self.resend_api_key is None:
+            return None
+        return self.resend_api_key.get_secret_value().strip() or None
+
+    @property
+    def email_test_recipient_set(self) -> frozenset[str]:
+        """EMAIL_TEST_RECIPIENTS as lowercased addresses."""
+        return frozenset(a.strip().lower() for a in self.email_test_recipients.split(",") if a.strip())
 
     @property
     def effective_requests_per_second(self) -> float:

@@ -2,8 +2,11 @@
 HEALTHCARE RESEARCH INTELLIGENCE AGENT: PROJECT DOCUMENTATION
 ================================================================================
 
-Snapshot date: 2026-10-24
-Repository:    /Users/bhumijain/Healthcare Research (Git branch: main)
+Snapshot date: 2026-10-25
+Repository:    /Users/bhumijain/Healthcare Research
+Branches:      main (= origin/main at 96fd5b6, fully pushed)
+               feature/research-subscriptions (current; Steps A-C committed as
+               f9ef312; Step D uncommitted; never pushed)
 Remote:        origin -> https://github.com/Bhumi8051/Healthcare-Research.git
 
 How this document was produced
@@ -14,11 +17,13 @@ the app, Git history, and the test and build commands listed in Section 9.
 
 Status labels used throughout:
 
-  [IMPLEMENTED]  Present in the code and covered by passing tests, or confirmed by
-                 a live check during this inspection.
+  [IMPLEMENTED]  On main (committed and pushed) and covered by passing tests, or
+                 confirmed by a live check.
+  [BRANCH]       Committed on feature/research-subscriptions (f9ef312, Steps A-C)
+                 and tested. Not on main or GitHub.
+  [UNCOMMITTED]  Step D (scheduled delivery): implemented and tested in the
+                 feature branch's working tree, NOT committed yet.
   [PARTIAL]      Present, but missing pieces described next to it.
-  [UNCOMMITTED]  Implemented and tested, but only in the working tree (not in any
-                 Git commit yet).
   [PLANNED]      Not implemented. A proposal only.
   [UNVERIFIED]   Not re-checked during this inspection; see the note beside it.
 
@@ -56,9 +61,10 @@ Problem statement
   PubMed returns large, unranked result sets, and reading many abstracts takes
   time. Researchers need:
     - focused search with filters,
-    - duplicate removal and relevance ranking, and
+    - duplicate removal and relevance ranking,
     - reliable explanations of individual papers at a reading level they choose,
-      with no invented facts.
+      with no invented facts, and
+    - to keep up with a topic over time without repeating searches by hand.
 
 Target users
   Biomedical researchers and students, from high-school level to PhD level (the
@@ -71,11 +77,19 @@ Long-term vision (the owner's stated goal)
     (c) delivers useful periodic research reports.
 
 Status of that vision on the snapshot date
-  (a) Finding papers                     [IMPLEMENTED]
-  Per-paper AI analysis                  [IMPLEMENTED]
-  Accounts, preferences, saved searches  [IMPLEMENTED] [UNCOMMITTED]
-  (b) Cross-paper synthesis              [PLANNED]
-  (c) Periodic reports                   [PLANNED]
+  (a) Finding papers                         [IMPLEMENTED]
+  Per-paper AI analysis                      [IMPLEMENTED]
+  Accounts, preferences, saved searches      [IMPLEMENTED]
+  Research subscriptions (stored settings)   [BRANCH]  (Step A)
+  Security hardening (AI login, limits)      [BRANCH]  (Step B)
+  Manual test email digests (Resend)         [BRANCH]  (Step C; real delivery
+                                             confirmed by the owner on
+                                             2026-10-25)
+  (b) Cross-paper synthesis                  [PLANNED]
+  (c) Scheduled digests by email             [UNCOMMITTED] (Step D: off by
+                                             default; dry_run and allowlist
+                                             test modes only, no unrestricted
+                                             sending)
 
 
 ================================================================================
@@ -91,7 +105,6 @@ Backend (backend/)  [IMPLEMENTED]
     pydantic==2.14.1
     pydantic-settings==2.16.1   reads backend/.env
     google-genai==2.33.0        Google's official Gemini SDK
-  Added by uncommitted work [UNCOMMITTED]:
     SQLAlchemy[asyncio]==2.1.6
     asyncpg==0.32.0
     alembic==1.20.1
@@ -100,7 +113,10 @@ Backend (backend/)  [IMPLEMENTED]
   Development-only (backend/requirements-dev.txt):
     -r requirements.txt
     pytest==9.1.1
-  Every installed version matches its pin (checked during this inspection).
+  Steps A, B and C added NO new dependencies (Step C calls Resend's HTTP API
+  with the existing httpx client). Step D adds one: tzdata==2026.5 (IANA
+  time-zone data for zoneinfo where the OS has none). [UNCOMMITTED] Time zones are validated with
+  Python's standard zoneinfo module.
 
 Frontend (frontend/)  [IMPLEMENTED]
   Node.js v22.17.1. Next.js requires Node >= 20.9.0.
@@ -126,17 +142,29 @@ External APIs
     Base URL: https://eutils.ncbi.nlm.nih.gov/entrez/eutils
   Google Gemini API  [IMPLEMENTED]
 
-Database
-  PostgreSQL 14.18 (Homebrew), local  [IMPLEMENTED] [UNCOMMITTED]
-    App database:  healthcare_research
-    Test database: healthcare_research_test
-    Schema is managed by Alembic. Current revision: 566c63628f3c (head).
-  Not implemented: cached AI analyses, a saved-papers library, report storage.
-  [PLANNED]
+Database: PostgreSQL 14.18 (Homebrew), local
+  App database:  healthcare_research
+  Test database: healthcare_research_test (tests empty its tables)
+  Schema managed by Alembic. Current revision of the app database:
+  1e29bb4ebd5b (head).
+    Migration chain (oldest first):
+      566c63628f3c  accounts, preferences, saved searches   [IMPLEMENTED]
+      b4f1c80f6ca2  research_subscriptions (Step A)          [BRANCH]
+      bd806695a174  ai_usage_daily, ai_usage_daily_total     [BRANCH]
+      96d41bf41bda  Step D: scheduling columns, digest_deliveries,
+                    digest_sent_papers                       [UNCOMMITTED]
+      b4bb321bb07f  Step D: frozen email payload columns     [UNCOMMITTED]
+      1e29bb4ebd5b  Step D: per-delivery unsubscribe tokens  [UNCOMMITTED]
+  Note: the three Step D migrations are already APPLIED to the local app
+  database (each after a pg_dump backup), but their files are uncommitted.
+  See Section 10.
 
 Not used / not implemented
   - Docker, CI, any hosting or deployment configuration          [PLANNED]
-  - An email provider and a scheduler or background worker       [PLANNED]
+  - Scheduler: an in-process loop (off by default) plus a CLI; PostgreSQL
+    is the job queue. No Celery/Redis/APScheduler                 [UNCOMMITTED]
+  - Email provider: Resend, manual test sends only               [BRANCH]
+  - Cached AI analyses or a saved-papers library                 [PLANNED]
   - A frontend unit/E2E test framework (none in package.json)    [PLANNED]
 
 
@@ -148,31 +176,43 @@ Not used / not implemented
 
 Healthcare Research/
   .gitignore              ignores .env, .env.*, .venv/, node_modules/, .next/, caches
-  README.md               setup / run guide
-  PROJECT_HISTORY.md      narrative milestone history [UNCOMMITTED]
-  PROJECT_DOCUMENTATION.txt  this file [UNCOMMITTED]
+  README.md               setup / run guide (security section updated on branch)
+  PROJECT_HISTORY.md      narrative milestone history (main)
+  PROJECT_DOCUMENTATION.txt  this file
+  docs/SCHEDULED_DIGESTS.md  [UNCOMMITTED] operations guide for Step D
   dev.sh                  starts backend + frontend together (executable)
   backend/
     .env.example          template of every setting (placeholders only)
     .env                  REAL secrets; git-ignored; never commit
     requirements.txt, requirements-dev.txt, pytest.ini
-    alembic.ini           [UNCOMMITTED]; has no database URL (read from settings)
-    migrations/           [UNCOMMITTED]
+    alembic.ini           no database URL (read from settings)
+    migrations/
       env.py              async Alembic environment; URL from DATABASE_URL
-      versions/20261024_566c63628f3c_accounts_preferences_saved_searches.py
+      versions/
+        20261024_566c63628f3c_accounts_preferences_saved_searches.py
+        20261024_b4f1c80f6ca2_research_subscriptions.py          [BRANCH]
+        20261024_bd806695a174_ai_usage_daily_limits.py           [BRANCH]
     app/
-      main.py             FastAPI app, CORS, lifespan, router registration, /health
+      main.py             FastAPI app, CORS, lifespan, limiters, log redaction,
+                          router registration, /health
       config.py           Settings (pydantic-settings), reads backend/.env
       models.py           Pydantic request/response models and enums
-      db.py               [UNCOMMITTED] async engine, sessionmaker, get_db
-      db_models.py        [UNCOMMITTED] ORM tables
+      db.py               async engine, sessionmaker, get_db (DB errors -> 503)
+      db_models.py        ORM tables
+      logging_setup.py    [BRANCH] keeps secrets out of logs
       routers/
         search.py         GET /api/search
-        analysis.py       POST /api/papers/{pmid}/analyze
-        errors.py         maps service errors to HTTP errors (shared)
-        auth.py           [UNCOMMITTED] /api/auth/*
-        account.py        [UNCOMMITTED] /api/me/preferences, /api/saved-searches
-        deps.py           [UNCOMMITTED] current user, CSRF check, cookie helpers
+        analysis.py       POST /api/papers/{pmid}/analyze (login + usage on branch)
+        auth.py           /api/auth/* (per-IP limits on branch)
+        account.py        /api/me/preferences, /api/saved-searches,
+                          /api/me/ai-usage [BRANCH]
+        subscriptions.py  [BRANCH] /api/subscriptions
+        digests.py        [BRANCH] /api/digests (Step C: preview, test email;
+                          Step D [UNCOMMITTED]: /deliveries history)
+        unsubscribe.py    [UNCOMMITTED] /api/unsubscribe (+ /one-click)
+        deps.py           current user, CSRF check, cookies, client IP, clock,
+                          usage guard
+        errors.py         maps service errors to safe HTTP errors (shared)
       services/
         pubmed.py         PubMedClient: ESearch/EFetch, XML parsing,
                           rate limiter, retries
@@ -181,11 +221,24 @@ Healthcare Research/
         ranking.py        keyword-overlap relevance score
         dedup.py          PMID -> DOI -> normalized-title deduplication
         dates.py          partial-date parsing, period maths, date filtering
-        filters.py        allowlisted article-type [pt] and language [la] terms
-        text.py           tokenizing and normalizing text, titles and DOIs
+        filters.py        allowlisted article-type [pt] terms
+        text.py           text, title and DOI normalization (normalize_title is
+                          also the subscription topic rule)
         gemini.py         Gemini adapter; the only module that imports google-genai
         analysis.py       prompt building, output validation, grounding checks
-        auth.py           [UNCOMMITTED] Argon2id hashing, sessions, login throttle
+        auth.py           Argon2id hashing, sessions, SlidingWindowLimiter /
+                          LoginThrottle (in-memory rate limiting)
+        usage.py          [BRANCH] AiUsageGuard: atomic daily AI limits + refunds
+        email.py          [BRANCH] EmailSender protocol + ResendEmailSender
+        digest.py         [BRANCH] subscriptions -> PubMed -> batched AI summaries
+        digest_render.py  [BRANCH] digest -> escaped HTML + plain-text email
+        schedule.py       [UNCOMMITTED] next run time (time zones, DST)
+        delivery.py       [UNCOMMITTED] the delivery engine (tick, claims,
+                          retries, idempotency, AI budget, cancellation)
+        unsubscribe.py    [UNCOMMITTED] tokens (hash only), links, headers,
+                          idempotent unsubscribe
+      scheduler.py        [UNCOMMITTED] background loop, advisory lock, heartbeat
+      jobs/digests.py     [UNCOMMITTED] CLI: status, run-once, review, resolve
     tests/                pytest suite (see Section 9)
   frontend/
     .env.example          NEXT_PUBLIC_API_URL template
@@ -195,14 +248,19 @@ Healthcare Research/
     README.md             unmodified create-next-app template (stale)
     src/
       app/
-        layout.tsx        root layout; wraps the app in AuthProvider [UNCOMMITTED]
+        layout.tsx        root layout: AuthProvider > AiUsageProvider [BRANCH] >
+                          SubscriptionsProvider [BRANCH] > page
         page.tsx          home: SiteHeader + <Suspense><ResearchSearch/></Suspense>
-        account/page.tsx  [UNCOMMITTED] /account route
-        globals.css
+        account/page.tsx  /account route
+        unsubscribe/page.tsx  [UNCOMMITTED] /unsubscribe confirmation page
+        globals.css       Tailwind + bell "ring" animation classes [BRANCH]
       lib/
         api/client.ts     the ONLY place that calls the backend
         api/types.ts      TypeScript mirror of the backend models
         filters.ts        filter state, option lists, saved-filter conversion
+        subscriptions.ts  [BRANCH] subscription types, options, validation,
+                          topicKey, API conversion
+        deliveries.ts     [UNCOMMITTED] delivery status labels and reasons
         validation.ts     client-side input checks (mirror backend rules)
         format.ts         date, count, language and abstract-section helpers
       components/
@@ -210,21 +268,24 @@ Healthcare Research/
         filters/          FilterSidebar, DateRangeFilter, CheckboxGroup
         results/          PaperList, PaperCard, AbstractText, AuthorList,
                           RelevanceBadge, ResultsSummary, ActiveFilterChips
-        analysis/         PaperAnalysisPanel, AnalysisReport
+        analysis/         PaperAnalysisPanel, AnalysisReport,
+                          AiUsageProvider [BRANCH]
         feedback/         LoadingResults, ErrorAlert, EmptyState
         layout/           SiteHeader
         ui/               SegmentedControl
-        auth/             [UNCOMMITTED] AuthProvider, AuthDialog, AccountMenu
-        account/          [UNCOMMITTED] AccountPage, PreferencesForm,
-                          SavedSearchList
-        saved/            [UNCOMMITTED] SaveSearchButton
+        auth/             AuthProvider, AuthDialog, AccountMenu
+        account/          AccountPage, PreferencesForm, SavedSearchList
+        saved/            SaveSearchButton
+        subscriptions/    [BRANCH] SubscriptionsProvider, SubscriptionDialog,
+                          SubscribeBell, SubscriptionList
 
 3.2 Component responsibilities (backend)
   main.py
-    Builds the FastAPI app. lifespan() creates one shared httpx.AsyncClient with
-    one PubMedClient (so its rate limiter covers all requests), one
-    GeminiReportGenerator, and the database engine and sessionmaker. It also
-    adds CORSMiddleware, sets app.state.login_throttle and registers the routers.
+    Installs log redaction first, then builds the FastAPI app. lifespan()
+    creates one shared httpx.AsyncClient with one PubMedClient (so its rate
+    limiter covers all requests), one GeminiReportGenerator, and the database
+    engine and sessionmaker. It adds CORSMiddleware (exposes Retry-After), sets
+    the in-memory limiters on app.state and registers the routers.
   PubMedClient
     Only talks to NCBI. Applies the rate limit and retries, and maps failures to
     PubMedTimeoutError / PubMedRateLimitError / PubMedResponseError.
@@ -236,8 +297,14 @@ Healthcare Research/
   analysis.analyze_paper
     Fetches the paper from PubMed, builds the prompt, calls the generator,
     validates the output and adds grounding warnings.
+  usage.AiUsageGuard [BRANCH]
+    Burst check, atomic reservation of the per-user and overall daily allowance
+    (before Gemini is called), refund on failure, and usage snapshots.
+  logging_setup.install_log_redaction [BRANCH]
+    Holds HTTP-client loggers at WARNING and redacts every log record.
   routers/errors.py
-    The single mapping from service errors to HTTP status codes.
+    The single mapping from service errors to HTTP status codes and safe
+    messages.
 
 3.3 Component responsibilities (frontend)
   ResearchSearch.tsx
@@ -248,9 +315,16 @@ Healthcare Research/
     requestJson() adds credentials:"include" to every request and the
     X-Requested-With: fetch header to non-GET requests. Turns errors into
     ApiError, with user-readable messages and hints.
-  AuthProvider.tsx [UNCOMMITTED]
+  AuthProvider.tsx
     Global auth state (loading / anonymous / authenticated / unavailable) and the
     log-in dialog.
+  AiUsageProvider.tsx [BRANCH]
+    Fetches today's AI allowance once per user (not once per card); refreshed
+    after each analysis attempt. Display only: the server enforces the limit.
+  SubscriptionsProvider.tsx [BRANCH]
+    Loads the user's subscriptions from the server and re-fetches the list after
+    every save or delete (the server is the source of truth). Hosts the
+    subscription dialog and the confirmation toast.
 
 3.4 Request flow: search
   1. Browser (http://localhost:3000): ResearchSearch.runSearch()
@@ -265,12 +339,18 @@ Healthcare Research/
        -> deduplicate_papers -> paper_matches_date_range -> rank_papers -> trim
        -> SearchResponse JSON
   3. The browser renders the summary, the filter chips and the paper cards.
+  No login and no usage limit (by decision; see Section 11).
 
 3.5 Request flow: paper analysis
-  1. User clicks "Analyze paper"
+  1. User clicks "Analyze paper" (logged out on branch: "Log in to analyze"
+     opens the login dialog instead)
        -> client.analyzePaper(pmid, level)
        -> POST /api/papers/{pmid}/analyze  {"summary_level": "..."}
-  2. routers/analysis.py -> analysis.analyze_paper()
+  2. routers/analysis.py
+       [BRANCH] require_user (401 if not logged in)
+       [BRANCH] AiUsageGuard.reserve(): burst check, then one transaction:
+                overall daily cap, then per-user daily cap (429 if reached)
+       -> analysis.analyze_paper()
        -> PubMedClient.efetch([pmid])   (paper content comes from PubMed, never
                                          from the browser)
        -> build_prompt()  (system rules + level guidance + paper JSON inside
@@ -278,12 +358,14 @@ Healthcare Research/
        -> GeminiReportGenerator.generate() -> parse_report() (strict validation)
        -> grounding_warnings()
        -> PaperAnalysis JSON
-  3. The browser renders the report in AnalysisReport.tsx.
+       [BRANCH] on ANY failure: AiUsageGuard.refund(), then a safe error.
+  3. The browser renders the report and refreshes the allowance.
 
-3.6 Request flow: accounts [UNCOMMITTED]
+3.6 Request flow: accounts, preferences, saved searches, subscriptions
   The browser sends the HttpOnly session cookie (hria_session) automatically.
   The backend looks up SHA-256(token) in user_sessions; it must not be expired.
   Changes (POST/PUT/DELETE) also require the X-Requested-With: fetch header.
+  Every query is filtered by the current user's id.
 
 
 ================================================================================
@@ -309,6 +391,8 @@ Healthcare Research/
       YYYY-MM or YYYY-MM-DD); electronic_date_iso; publication_types;
       languages; doi, doi_url, pubmed_url.
   - Unknown PMIDs are removed; repeated ids are de-duplicated.
+  - [BRANCH] Connection-error messages include only the exception type, never
+    the httpx message (which could contain the request URL and its api_key).
 
 4.2 Search pipeline  [IMPLEMENTED]
   1. Candidate pool = max_results x SEARCH_CANDIDATE_MULTIPLIER (default 3),
@@ -343,20 +427,21 @@ Healthcare Research/
       review, systematic_review, meta_analysis, randomized_controlled_trial,
       clinical_trial, observational_study, case_reports, comparative_study,
       guideline, practice_guideline
-  - Language (repeatable), sent to PubMed as [la] terms:
-      english, spanish, french, german, chinese, japanese, italian,
-      portuguese, russian
   - Only allowlisted values are accepted; anything else is 422.
-  - Several values of one filter are combined with OR; different filters with
-    AND; the user's query is wrapped in parentheses.
+  - Several article types are combined with OR, then AND'ed with the query;
+    the user's query is wrapped in parentheses.
+  - The language filter ([la]) was removed [UNCOMMITTED]: the UI no longer
+    offers it, the API ignores a language= parameter, and saved searches stored
+    with a "languages" key still load (the key is ignored). Papers still show
+    their language (PubMed metadata) on the card.
 
 4.4 Reading (summary) level  [IMPLEMENTED]
   - High School / College / PhD selector in the UI. Values: high_school,
     college, phd.
   - Kept across searches and sent with each analysis request.
   - Each level has its own instructions in analysis.LEVEL_GUIDANCE.
-  - [UNCOMMITTED] A signed-in user's preferred level is applied on login and
-    whenever that preference changes.
+  - A signed-in user's preferred level is applied on login and whenever that
+    preference changes.
 
 4.5 Gemini paper analysis  [IMPLEMENTED; live-verified]
   - On demand only. Search never calls Gemini (test:
@@ -393,10 +478,12 @@ Healthcare Research/
         the PubMed record are flagged in grounding_warnings.
   - Papers without an abstract: the prompt says so, abstract_available=false,
     and the source note explains the analysis is limited to metadata.
+  - [BRANCH] Login required, and subject to the daily limits in Section 4.10.
 
 4.6 Error handling  [IMPLEMENTED]
   See Section 6 for status codes. Safe messages only; provider messages, keys
-  and stack traces are never returned (tested).
+  and stack traces are never returned (tested). [BRANCH] PubMed failures shown
+  to users are now a fixed message; details go to the (redacted) server log.
 
 4.7 Frontend UI  [IMPLEMENTED]
   - Search and results:
@@ -411,12 +498,15 @@ Healthcare Research/
   - Analysis panel: "Analyze paper", loading state, protection against
     double-clicks, retry, "Re-analyze at <level> level", show/hide, and a
     labelled report view with grounding warnings.
+    [BRANCH] Logged out: "Log in to analyze" (opens the login dialog with a
+    reason). Logged in: "N of 20 left today". At the limit: button disabled,
+    with the reset time in local time.
   - States: loading skeletons, empty results, error alerts. The network-error
     alert lists 3 likely causes.
   - Accessibility: labels, aria-live status, native <dialog> and popover
     elements, keyboard support. Dark mode. Responsive down to 390 px.
 
-4.8 Accounts, preferences, saved searches  [IMPLEMENTED] [UNCOMMITTED]
+4.8 Accounts, preferences, saved searches  [IMPLEMENTED]
   - Register, login, logout, current-account endpoints.
   - Passwords: Argon2id (argon2-cffi defaults), 10-128 characters, rehashed if
     the hashing parameters change.
@@ -430,7 +520,7 @@ Healthcare Research/
     routes, plus SameSite=Lax and the CORS allowlist.
   - Login throttle: 5 failures per email per 900 s, then 429 with Retry-After.
     In memory. Unknown emails are checked against a dummy hash so timing is the
-    same.
+    same. ([BRANCH] per-IP limits added, see 4.10.)
   - Preferences: summary_level plus up to 20 research_interests (2-100 chars
     each, de-duplicated ignoring case).
   - Saved searches: name (up to 120 chars; defaults to the query), query (2-500
@@ -438,13 +528,223 @@ Healthcare Research/
     beyond that); newest first.
   - Owner isolation: another user's saved search answers 404. Deleting a user
     cascades to all of their rows.
-  - Database outages and schema problems give 503, while search and analysis
-    keep working.
+  - Database outages and schema problems give 503, while search keeps working.
   - Frontend: Log in / sign-up dialog, account menu, /account page (preferences
     form and saved-search list with Run / Delete), "Save search" above results,
     interest chips as one-click searches, saved searches open via /?saved=<id>.
 
-4.9 Developer tooling  [IMPLEMENTED]
+4.9 Research subscriptions (Step A: stored settings)  [BRANCH]
+  What it is: a saved "keep me updated on this topic" setting per user.
+  Nothing runs on the subscription's schedule: there is no scheduler, so no
+  automatic fetching, analysis or email (Step D). A user can build a digest
+  from their subscriptions on demand and send a one-off test email to
+  themselves (Step C, Section 4.12).
+  - UI:
+      - Netflix-style bell beside the Search button: outline when not
+        subscribed, filled with sound waves when subscribed, swings on hover
+        and after saving (skipped under reduced motion).
+      - "Follow topic" on every paper card (topic prefilled with the title).
+      - Dialog: topic (prefilled from the search box), Daily / Weekly / Monthly,
+        delivery day (weekday for weekly, 1-28 for monthly), delivery time
+        (30-minute steps), time zone (all browser IANA zones), 5 / 10 / 15 / 20
+        papers, reading level (High School / General Reader, College /
+        Undergraduate, Researcher / Technical), "Automatic email delivery"
+        (default ON), "Email me even when there are no new papers."
+      - Clear status text: settings are saved to the account, but nothing is
+        sent on the schedule yet (automatic delivery needs a scheduler); a
+        one-off test email can be sent from the account page.
+      - Duplicates: a topic you already follow opens "Manage" instead; typing a
+        duplicate offers "Manage that subscription"; the server's 409 is shown
+        even for duplicates the page didn't know about.
+      - /account: "Research subscriptions" list with Manage, New subscription,
+        loading, error (Try again) and empty states, and an "Email delivery not
+        active yet" badge.
+  - Storage: research_subscriptions table (migration b4f1c80f6ca2), linked to
+    the user with ON DELETE CASCADE.
+  - Server-side validation: topic 2-200 chars containing letters or digits;
+    frequency enum; weekday 0-6 required for weekly, month_day 1-28 required for
+    monthly, the unused one cleared; delivery_time "HH:MM"; time_zone must exist
+    in Python's zoneinfo database; paper_count in {5,10,15,20}; reading level
+    enum; unknown fields rejected.
+  - Uniqueness: UNIQUE (user_id, topic_key), where topic_key is
+    services/text.normalize_title(topic) computed by the server (lowercase,
+    accents removed, punctuation and spacing collapsed). The frontend's
+    lib/subscriptions.topicKey applies the same rule; verified identical on
+    sample inputs.
+  - Database check constraints enforce frequency, schedule consistency
+    (including IS NOT NULL for the required day), paper count, reading level
+    and non-empty topic_key.
+  - Limit: 50 subscriptions per user (409 beyond that).
+  - Every response includes delivery_active=false.
+
+4.10 Security hardening (Step B)  [BRANCH]
+  - AI analysis requires login (401 otherwise; Gemini is never called).
+  - Daily AI limits, enforced atomically in PostgreSQL (migration bd806695a174):
+      - per user: AI_DAILY_LIMIT_PER_USER (default 20) per UTC day;
+      - overall: AI_DAILY_LIMIT_TOTAL (default 200) per UTC day; 0 disables it.
+    Reservation is one transaction of
+      INSERT ... ON CONFLICT DO UPDATE SET used = used + 1 WHERE used < :limit
+      RETURNING used
+    (no row returned = limit reached -> 429 with Retry-After = seconds until
+    midnight UTC). PostgreSQL row locking prevents concurrent over-use (tested
+    with 12 simultaneous reservations against a limit of 5).
+  - Refunds: any failure after reservation (Gemini error, timeout, invalid
+    output, paper not found, PubMed outage, unexpected exception) gives the unit
+    back. Only successful analyses count. Refunds never go below zero.
+  - Burst brake: AI_BURST_PER_MINUTE (default 5) per user, in memory.
+  - GET /api/me/ai-usage reports used / limit / remaining (also respects the
+    overall cap) / resets_at.
+  - Login and registration rate limits (in memory, see Section 11):
+      - failed logins: 5 per email AND LOGIN_IP_MAX_FAILURES (default 20) per
+        IP per LOGIN_IP_WINDOW_SECONDS (900);
+      - sign-ups: REGISTER_IP_MAX_ATTEMPTS (default 5) per IP per
+        REGISTER_IP_WINDOW_SECONDS (3600), counting duplicate-email attempts;
+      - successful logins are never limited and do NOT reset the IP counter;
+      - X-Forwarded-For is ignored unless TRUST_PROXY_HEADERS=true.
+  - Secrets out of logs (app/logging_setup.py):
+      - httpx, httpcore, google_genai, google.genai and urllib3 loggers held at
+        WARNING (NCBI requires api_key in the URL, which httpx logs at INFO);
+      - every log record (message and traceback) is redacted: values of
+        api_key= / api-key= / key= / access_token= / token= / password= /
+        passwd= / secret= (case-insensitive), passwords in URLs
+        (scheme://user:PASSWORD@host), and the literal values of
+        NCBI_API_KEY, GEMINI_API_KEY and the DATABASE_URL password (literal
+        values shorter than 6 characters are not matched).
+  - CORS exposes Retry-After, so browser code is allowed to read the header.
+    (The current frontend doesn't read it; see "Frontend handling" below.)
+  - Frontend handling (PaperAnalysisPanel.tsx, AiUsageProvider.tsx):
+      - logged out: the hint reads "AI paper analysis is available to
+        signed-in users"; the button "Log in to analyze" opens the login
+        dialog with a reason and sends no request;
+      - logged in: "N of 20 left today", from GET /api/me/ai-usage;
+      - at the limit (remaining = 0): the button is disabled and the hint
+        shows the reset time in the browser's local time;
+      - after every attempt (success or failure) the allowance is re-fetched,
+        so refunds show up immediately;
+      - a server 429 (e.g. the burst limit, or the overall cap reached by
+        other users) is shown as the server's own message in the error alert.
+    These are display only; the server enforces every limit.
+  - Search stays public with no rate limit (owner's decision for this step).
+
+4.12 Test email digests (Step C: manual sends only)  [BRANCH]
+  Automatic daily/weekly/monthly delivery is Step D and is NOT implemented.
+  Live delivery VERIFIED on 2026-10-25 (about 03:40 UTC): the owner sent a
+  manual test digest ("breast cancer" subscription) from /account to their own
+  allowlisted address with Resend's test sender (onboarding@resend.dev), and
+  confirmed it arrived. The server recorded 2 AI units that day (preview +
+  send). This verifies the manual path only, to the Resend account owner's
+  address; sending to other addresses (needs a verified domain) and any
+  scheduled sending are NOT verified or implemented. Automated tests mock
+  Resend.
+  - Provider: Resend, called directly with httpx (POST /emails, Bearer key,
+    Idempotency-Key header). services/email.py defines an EmailSender protocol,
+    so tests use a fake and the provider can be swapped.
+  - Digest content (services/digest.py), per chosen subscription (1-3):
+      - the existing PubMed search for the topic, paper_count results, in a
+        window from the frequency: daily and weekly = past week (PubMed can
+        take days to index), monthly = past month. If the window is empty,
+        the most relevant papers from any date are used, and the digest says so;
+      - each paper: title (PubMed link), first 3 authors (+ "et al."),
+        journal, publication date, PMID, DOI link;
+      - AI summaries: ONE Gemini request per subscription summarizes all of
+        its papers (2-3 sentences each) at the subscription's reading level,
+        with the same evidence rules as paper analysis (records are untrusted
+        data, "<" escaped). It uses 1 unit of the daily AI allowance; any
+        failure refunds it. Each summary must be for a PMID that was sent, at
+        most 1200 characters, and contain no numbers or links missing from
+        that paper's record; otherwise it is withheld with a note;
+      - if Gemini fails or the allowance is used up, the digest is still
+        built, with the start of each abstract (about 320 characters) instead;
+        papers without an abstract need no AI.
+    There is no "new since the last digest" tracking (no history is stored).
+  - Email (services/digest_render.py): inline-styled HTML plus a plain-text
+    version. Everything from PubMed/Gemini is HTML-escaped and only https://
+    links are rendered. Includes a "manual test, automatic delivery not active"
+    notice, a source note and the not-medical-advice disclaimer.
+  - Safety for test sends (routers/digests.py), all checked BEFORE any AI is
+    used or email sent:
+      1. EMAIL_ENABLED=true (default false) and RESEND_API_KEY set (503 otherwise);
+      2. the recipient is ALWAYS the signed-in account's email; the request
+         body rejects unknown fields such as "to" (422);
+      3. that address must be in EMAIL_TEST_RECIPIENTS (403 otherwise), because
+         accounts aren't email-verified;
+      4. subscriptions must belong to the user (404 otherwise);
+      5. EMAIL_TEST_SENDS_PER_HOUR per user (default 5, in memory; 429 with
+         Retry-After).
+    Provider-side: Resend's test sender onboarding@resend.dev only delivers
+    to the Resend account owner's address.
+  - Errors: Resend 401 -> 503 (key rejected); 403 -> 502 with an explanation
+    of the test-sender rule; 400/422 -> 502 (check EMAIL_FROM); 429 -> 429;
+    5xx or network -> 502; timeout -> 504. Only the HTTP status and Resend's
+    fixed error name are logged; never the key, the recipient or Resend's
+    message text. The Resend key and any "Bearer <token>" are redacted from logs.
+  - Frontend (/account, TestDigestPanel.tsx): a readiness checklist (switch on,
+    key set, address allowed, with the fix for each), choose 1-3
+    subscriptions, "Preview digest" (sends nothing) and "Send test email",
+    progress text, the Resend message ID after sending, and the digest shown
+    in the page. The AI allowance is refreshed after each attempt.
+  - No database changes.
+
+4.13 Scheduled digest delivery (Step D)  [UNCOMMITTED]
+  Operations, configuration, recovery and troubleshooting: docs/SCHEDULED_DIGESTS.md.
+  - Safety defaults: DIGEST_DELIVERY_MODE=off and DIGEST_SCHEDULER_ENABLED=false.
+    Modes: off / dry_run (built, never sent) / allowlist (EMAIL_TEST_RECIPIENTS
+    only; silently "off" unless EMAIL_ENABLED, RESEND_API_KEY and the allowlist
+    are all set). No unrestricted mode exists. tests/conftest.py forces both
+    switches off for every test run, whatever backend/.env says.
+  - Scheduling (services/schedule.py): next_run_at in UTC from the wall-clock
+    schedule in the subscription's time zone; spring-forward gaps shift
+    forward, fall-back repeats run once (first occurrence). Recomputed on any
+    schedule/status change; NULL while email is off or unsubscribed.
+  - Engine (services/delivery.py), one tick: fill missing next_run_at ->
+    recover expired leases -> schedule due runs (UNIQUE subscription_id +
+    scheduled_for; > grace late = skipped_missed: 6 h daily, 24 h weekly or
+    monthly) -> claim with FOR UPDATE SKIP LOCKED + lease (600 s) -> recheck
+    preferences/allowlist/recipient -> search PubMed (window ends on the
+    scheduled local date and starts 7/14/45 days before the last SENT window's
+    end, capped at 14/35/92 days; already-sent PMIDs excluded) -> one Gemini
+    request from the overall daily cap only (DIGEST_MAX_AI_CALLS_PER_TICK=5) ->
+    freeze subject/HTML/text/headers -> recheck under a row lock -> send with
+    Idempotency-Key "digest-<id>".
+  - Outcomes: sent (PMIDs, last_sent_at and the window recorded in the same
+    transaction) / retry (5 min, 30 min, 2 h; DIGEST_MAX_ATTEMPTS=4) / failed
+    (definitely not delivered) / needs_review (may have been delivered: never
+    resent automatically). outcome_uncertain is committed before every send;
+    uncertain sends are retried with the identical payload and key only within
+    DIGEST_SAFE_RETRY_HOURS=23 of the first attempt (Resend keeps keys 24 h;
+    it answers 409 if a key is reused with a different payload).
+  - Cancellation: changing the schedule, turning email off or unsubscribing
+    cancels queued deliveries (needs_review if an earlier attempt may have gone
+    out).
+  - Staleness (stage 4 audit fix): no digest is ever sent more than its grace
+    period (6 h daily, 24 h weekly/monthly; the same MISSED_GRACE that skips
+    missed runs) after its scheduled time. Every tick, in every mode including
+    off, first expires queued deliveries past it: skipped_missed "expired"
+    (papers stay eligible) or needs_review if possibly sent; tokens scrubbed.
+  - Claim ownership (stage 4 audit fix): before freezing and before sending, a
+    worker re-checks under a row lock that it still holds its lease; otherwise
+    it stops ("lease_lost") and the next tick recovers the delivery.
+  - Unsubscribe (services/unsubscribe.py, routers/unsubscribe.py): one random
+    256-bit token per real email, SHA-256 stored on the delivery; body link to
+    /unsubscribe (confirm page; opening it changes nothing) and
+    List-Unsubscribe header; List-Unsubscribe-Post only when PUBLIC_API_URL is
+    https. One-click POST: no cookies/CSRF, empty 200, no redirect. Idempotent.
+    Invalid tokens: one generic 404; > 30 per IP per 10 min -> 429.
+  - Token exposure: the plain token exists only in the email, at Resend, and in
+    the stored payload while the delivery is pending/sending; every final
+    status (all paths, including bulk cancellation) replaces it with
+    token=removed. Access-log request lines show token=[REDACTED].
+  - Operations: CLI `python -m app.jobs.digests status | run-once [--dry-run] |
+    review | resolve` (review/resolve never send); GET /health reports the
+    scheduler heartbeat; ticks with failed/needs_review/recovered deliveries and
+    tick errors are logged as WARNING/ERROR. Test runs force the scheduler,
+    scheduled sending and real email off (tests/conftest.py, verified by
+    tests/test_test_safety.py).
+  - Frontend: subscription status (unsubscribed / email off / next run in its
+    time zone / last sent), real delivery_active badge, "Scheduled digest
+    history" card, /unsubscribe page, scheduled-mode line in the test panel.
+
+4.11 Developer tooling  [IMPLEMENTED]
   - dev.sh:
       - Checks that .venv and node_modules exist and that the ports are free.
       - Reuses a healthy backend already on 8010.
@@ -489,15 +789,56 @@ Milestone 4: Gemini paper analysis                    Commit 071da4d
   Delivered: POST /api/papers/{pmid}/analyze, the gemini.py adapter,
   analysis.py, the 9-section structured report, grounding checks, the frontend
   analysis panel and report view, 62 mocked tests and 1 opt-in live test.
-  Status: [IMPLEMENTED]. The live test PASSED during this inspection.
-  Outstanding: commit 071da4d is NOT pushed to origin (main is 1 ahead).
+  Status: [IMPLEMENTED]. Pushed.
 
-Milestone 5: Accounts, preferences, saved searches    NOT COMMITTED
-  Delivered in the working tree: PostgreSQL + Alembic, auth, preferences, saved
-  searches, the /account page, and 53 account tests + 2 migration tests.
-  Also uncommitted: a fix for the login dialog closing instantly in `next dev`
-  (React Strict Mode), and a fix so /?saved=<id> also works in development.
-  Status: [IMPLEMENTED] [UNCOMMITTED]
+Milestone 5: Accounts, preferences, saved searches    Commit 96fd5b6
+  Delivered: PostgreSQL + Alembic, auth, preferences, saved searches, the
+  /account page, account and migration tests, the login-dialog fix for React
+  Strict Mode, PROJECT_DOCUMENTATION.txt and PROJECT_HISTORY.md.
+  Status: [IMPLEMENTED]. Pushed (main = origin/main).
+
+Research-subscription prototype                       feature/research-subscriptions
+  Delivered: the bell, the subscription dialog, "Follow topic" on cards and the
+  account-page list, first held in memory only. UI refined twice on owner
+  feedback (uniform 44 px controls, time dropdown instead of a native time
+  input for Safari, ringing bell).
+  Status: superseded by Step A (now server-backed). [BRANCH]
+
+Step A: Persistent research subscriptions             feature/research-subscriptions
+  Delivered: research_subscriptions table + migration b4f1c80f6ca2,
+  /api/subscriptions CRUD, server-side validation, per-user unique topic,
+  frontend wired to the API, 50 tests.
+  Status: [BRANCH] (committed in f9ef312).
+
+Step B: Security hardening                            feature/research-subscriptions
+  Delivered: login for AI analysis, atomic daily limits with refunds (migration
+  bd806695a174), GET /api/me/ai-usage, per-IP login/registration limits, log
+  redaction, generic PubMed errors, Retry-After exposed via CORS, 37 tests.
+  Status: [BRANCH] (committed in f9ef312).
+
+Step C: Manual test email digests                     feature/research-subscriptions
+  Delivered: Resend email service, digest builder with batched and validated
+  AI summaries, HTML/text rendering, /api/digests (email-status, preview,
+  test-send) with five safety checks, the account-page test panel, 59 tests.
+  No migrations.
+  Status: [BRANCH] (committed in f9ef312). Real delivery confirmed by the
+  owner on 2026-10-25 UTC (manual test send to their own address).
+
+Step D: Scheduled digest delivery                     feature/research-subscriptions
+  Stage 1: next-run calculation (time zones, DST), migration 96d41bf41bda,
+           next_run_at kept current on every save.
+  Stage 2: delivery engine (PostgreSQL queue, SKIP LOCKED claims, advisory
+           lock, frozen payload + idempotency keys, retries, uncertain-outcome
+           handling, global AI cap), modes off/dry_run/allowlist, scheduler
+           loop, CLI; migration b4bb321bb07f.
+  Stage 3: per-delivery unsubscribe tokens (hash only), List-Unsubscribe
+           headers, /unsubscribe page, delivery history + status UI;
+           migration 1e29bb4ebd5b.
+  Stage 4: operations guide (docs/SCHEDULED_DIGESTS.md), status diagnostics,
+           review/resolve commands, scheduler heartbeat in /health, token
+           scrubbing on bulk cancellation, uvicorn access-log fix, test-run
+           safety guard.
+  Status: [UNCOMMITTED]. Default OFF. No scheduled email has been sent.
 
 
 ================================================================================
@@ -508,13 +849,19 @@ Base URL (local): http://localhost:8010
 Interactive docs: http://localhost:8010/docs (Swagger), /openapi.json
 Every error body is JSON: {"detail": "<message>"}. FastAPI's own validation
 errors use {"detail": [{"loc": [...], "msg": "...", "type": "..."}]}.
+429 responses carry a Retry-After header (seconds), exposed via CORS.
 
 ----------------------------------------------------------------------------
 GET /health
-  200  {"status": "ok"}
+  200  {"status": "ok", "digest_scheduler": {"enabled", "mode", "running",
+        "stale", ...}}  ("status" is always "ok" while the API is up; dev.sh
+        relies on it.) When the scheduler runs, digest_scheduler also has
+        interval_seconds, started_at, last_tick_at, last_success_at,
+        last_summary, last_error (exception type only), consecutive_failures.
+        [UNCOMMITTED]
 
 ----------------------------------------------------------------------------
-GET /api/search
+GET /api/search  (public: no login, no rate limit)
   Query parameters:
     q                string, required, 2-500 chars after trimming
     max_results      int, optional, default 20, allowed 1-100
@@ -522,11 +869,10 @@ GET /api/search
     end_date         optional: same formats
     period           all (default) | week | month
     article_type     repeatable, allowlist in Section 4.3
-    language         repeatable, allowlist in Section 4.3
     include_undated  bool, default false
   200  SearchResponse:
     query, total_results, returned, start_date, end_date (effective,
-    YYYY-MM-DD or null), period, article_types, languages, pubmed_query,
+    YYYY-MM-DD or null), period, article_types, pubmed_query,
     duplicates_removed, excluded_by_date, warnings[], papers[Paper]
   Paper fields:
     pmid, title, abstract|null, authors[{name, affiliation|null}],
@@ -538,13 +884,15 @@ GET /api/search
     422  invalid query, limit, date, value not in the allowlist, start after
          end, or a period that doesn't overlap the custom range
     429  PubMed rate limit
-    502  PubMed error or malformed response
+    502  PubMed error or malformed response ("PubMed returned an unexpected
+         response. Please try again." on branch)
     504  PubMed timeout
   Example:
-    curl "http://localhost:8010/api/search?q=metformin%20breast%20cancer&max_results=5&period=month&article_type=review&language=english"
+    curl "http://localhost:8010/api/search?q=metformin%20breast%20cancer&max_results=5&period=month&article_type=review"
 
 ----------------------------------------------------------------------------
 POST /api/papers/{pmid}/analyze
+  [BRANCH] Requires login (session cookie). On main it is public.
   Path: pmid must match ^[1-9]\d{0,9}$
   Body (extra fields are rejected): {"summary_level": "high_school"|"college"|"phd"}
   200  PaperAnalysis:
@@ -558,17 +906,27 @@ POST /api/papers/{pmid}/analyze
       further_questions[]
     }
   Errors:
+    401  [BRANCH] not logged in
     422  bad PMID, bad level, or extra body fields
-    404  PMID not found in PubMed
-    503  GEMINI_API_KEY missing, or the key was rejected
-    429  Gemini quota or rate limit (Retry-After: 60), or PubMed rate limit
+    404  PMID not found in PubMed (refunded)
+    429  [BRANCH] daily per-user limit, overall daily cap, or burst limit
+         (Retry-After); also Gemini quota/rate limit or PubMed rate limit
+    503  GEMINI_API_KEY missing or rejected; or database unavailable
     504  Gemini or PubMed timeout
     502  Gemini server error, model not found (mentions GEMINI_MODEL), blocked
          or truncated output, invalid structured output, or a PubMed error
-  Note: no login is required. See Section 11.
+  [BRANCH] Every failure refunds the reserved usage.
 
 ----------------------------------------------------------------------------
-Accounts  [UNCOMMITTED]
+GET /api/me/ai-usage  [BRANCH]
+  Requires login.
+  200  {"used": int, "limit": int, "remaining": int, "resets_at": ISO 8601}
+       remaining also respects the overall daily cap; resets_at is the next
+       midnight UTC.
+  401  not logged in
+
+----------------------------------------------------------------------------
+Accounts
   The session cookie is hria_session. Routes marked (CSRF) require the header
   X-Requested-With: fetch, or they answer 403.
 
@@ -578,12 +936,14 @@ POST /api/auth/register (CSRF)
                    preferences{summary_level, research_interests[]}}
        and sets the cookie
   409  email already registered;  422  invalid input
+  429  [BRANCH] too many sign-up attempts from this IP (Retry-After)
 
 POST /api/auth/login (CSRF)
   Body: {"email", "password"}
   200  AccountOut and sets the cookie
   401  "Incorrect email or password."
-  429  throttled (Retry-After)
+  429  too many failed logins for this email, or [BRANCH] from this IP
+       (Retry-After)
   422  invalid input
 
 POST /api/auth/logout (CSRF)
@@ -606,7 +966,8 @@ GET /api/saved-searches
 POST /api/saved-searches (CSRF)
   Body: {"name"?: up to 120 chars, "query": 2-500 chars,
          "filters"?: {period, start_date, end_date, include_undated,
-                      article_types[], languages[], max_results 1-100}}
+                      article_types[], max_results 1-100}}
+        (a legacy "languages" key is accepted and ignored)
   201  SavedSearchOut {id (UUID), name, query, filters, created_at}
   401;  409 limit of 100 reached;  422
 
@@ -618,7 +979,109 @@ GET /api/saved-searches/{search_id}
 DELETE /api/saved-searches/{search_id} (CSRF)
   204;  404;  422
 
-Any account route: 503 if the database is unreachable or its schema is missing.
+----------------------------------------------------------------------------
+Research subscriptions  [BRANCH]
+  Login required on every route; (CSRF) as above. Another user's subscription
+  answers 404, not 403.
+
+  SubscriptionIn (create/replace body; unknown fields rejected):
+    topic                     2-200 chars, must contain letters or digits
+    frequency                 daily | weekly | monthly
+    weekday                   0-6 (0 = Sunday); required if weekly
+    month_day                 1-28; required if monthly
+    delivery_time             "HH:MM" (24-hour)
+    time_zone                 IANA name, e.g. "America/New_York"
+    paper_count               5 | 10 | 15 | 20
+    reading_level             high_school | college | phd
+    email_enabled             bool, default true (stored preference only)
+    email_when_no_new_papers  bool, default false
+  SubscriptionOut = the fields above (unused day returned as null) plus
+    id (UUID), delivery_active (true only if scheduled digests would really be
+    emailed; see below), next_run_at, last_sent_at, unsubscribed_at,
+    created_at, updated_at.
+
+GET /api/subscriptions
+  200  list[SubscriptionOut], newest first (up to 50);  401
+
+POST /api/subscriptions (CSRF)
+  201  SubscriptionOut
+  409  "You already have a subscription for this topic." (same normalized
+       topic) or the 50-subscription limit
+  401;  422
+
+GET /api/subscriptions/{subscription_id}
+  200  SubscriptionOut;  404 not found or not yours;  422 not a UUID;  401
+
+PUT /api/subscriptions/{subscription_id} (CSRF)
+  200  SubscriptionOut (full replacement)
+  409  the new topic duplicates another of your subscriptions
+  404;  422;  401
+
+DELETE /api/subscriptions/{subscription_id} (CSRF)
+  204;  404;  422;  401
+
+----------------------------------------------------------------------------
+Research digests  [BRANCH] (Step C; manual only, nothing is scheduled)
+  Login required on every route; POST routes need the CSRF header.
+
+GET /api/digests/email-status
+  200  {enabled, configured, recipient, recipient_allowed, sender,
+        test_sender, sends_per_hour, automatic_delivery_active: false}
+       (configured says whether RESEND_API_KEY is set; the key is never returned)
+  401
+
+DigestRequest body (unknown fields rejected, so no recipient can be given):
+  {"subscription_ids": [1-3 UUIDs of your own subscriptions]}
+
+POST /api/digests/preview (CSRF)
+  200  Digest {subject, generated_at, model|null, disclaimer,
+               sections[{subscription_id, topic, frequency, reading_level,
+                         window, used_fallback, total_results, ai_status
+                         (generated|limit_reached|failed|not_needed), ai_note,
+                         papers[{pmid, title, authors[], journal,
+                                 publication_date, doi, doi_url, pubmed_url,
+                                 ai_summary, abstract_excerpt, summary_note}]}]}
+       Sends nothing. Uses 1 AI unit per section that gets summaries.
+  404 not yours / not found;  422;  401;  502/504 PubMed errors
+
+POST /api/digests/test-send (CSRF)
+  200  {sent_to (your account email), provider_message_id (Resend id), digest}
+  503  EMAIL_ENABLED is false, or RESEND_API_KEY missing or rejected
+  403  your email isn't in EMAIL_TEST_RECIPIENTS
+  404  a subscription isn't yours;  422 bad body (including any "to" field)
+  429  test-send limit per hour (Retry-After), or Resend's rate limit
+  502  Resend refused the message or is unavailable, or a PubMed error
+  504  Resend or PubMed timeout
+
+GET /api/digests/deliveries  [UNCOMMITTED]
+  Login required. Query: subscription_id (optional), limit 1-100 (default 30).
+  200  list[{id, subscription_id, topic, scheduled_for, status, reason, attempts,
+        papers_count, window_start, window_end, sent_at, mode}], newest first,
+        only the caller's. No email content, addresses or tokens.
+  401
+
+SubscriptionOut and email-status additions  [UNCOMMITTED]
+  SubscriptionOut: next_run_at, last_sent_at, unsubscribed_at; delivery_active
+  is now true only if the scheduler would really email this account (scheduler
+  on, allowlist mode, email set up, address allowlisted, email on, not
+  unsubscribed). EmailStatusOut: delivery_mode, scheduler_enabled,
+  automatic_delivery_active.
+
+----------------------------------------------------------------------------
+Unsubscribe  [UNCOMMITTED]   (no login; the token is the only credential;
+                              no CSRF header needed)
+GET  /api/unsubscribe?token=...     200 {status: subscribed|unsubscribed, topic}
+                                    Changes nothing.
+POST /api/unsubscribe {"token"}     200 {status: unsubscribed|already_unsubscribed,
+                                    topic}; unknown fields rejected (422)
+POST /api/unsubscribe/one-click?token=...
+                                    RFC 8058: any body, empty 200, no redirect
+  All: 404 "This unsubscribe link is invalid or no longer exists." for malformed
+  or unknown tokens; 422 if the token is missing or over 100 characters; 429
+  (Retry-After) after too many invalid tokens from one IP.
+
+Any database-backed route: 503 if the database is unreachable or its schema
+is missing (run alembic upgrade head).
 
 
 ================================================================================
@@ -659,16 +1122,50 @@ backend/.env (names from app/config.py; defaults are the code defaults)
   CORS_ALLOW_LOCAL_ORIGINS       optional  true. Allows any localhost /
                                  127.0.0.1 / [::1] port. Set false in production
   CORS_ORIGINS                   optional  []. JSON list of exact production origins
-  DATABASE_URL        SECRET if it has a password  [UNCOMMITTED]
+  DATABASE_URL        SECRET if it has a password
                                  postgresql+asyncpg://localhost/healthcare_research
-  SESSION_COOKIE_NAME            optional  hria_session [UNCOMMITTED]
-  SESSION_TTL_DAYS               optional  14 (1-90) [UNCOMMITTED]
-  SESSION_COOKIE_SECURE          optional  false. MUST be true in production
-                                 (HTTPS) [UNCOMMITTED]
+  SESSION_COOKIE_NAME            optional  hria_session
+  SESSION_TTL_DAYS               optional  14 (1-90)
+  SESSION_COOKIE_SECURE          optional  false. MUST be true in production (HTTPS)
   SESSION_COOKIE_SAMESITE        optional  lax (lax|strict|none; none requires
-                                 secure=true) [UNCOMMITTED]
-  LOGIN_MAX_FAILURES             optional  5 [UNCOMMITTED]
-  LOGIN_FAILURE_WINDOW_SECONDS   optional  900 [UNCOMMITTED]
+                                 secure=true)
+  LOGIN_MAX_FAILURES             optional  5 per email (in memory)
+  LOGIN_FAILURE_WINDOW_SECONDS   optional  900
+  [BRANCH] Step B:
+  LOGIN_IP_MAX_FAILURES          optional  20 per IP (1-1000; in memory)
+  LOGIN_IP_WINDOW_SECONDS        optional  900
+  REGISTER_IP_MAX_ATTEMPTS       optional  5 per IP (1-1000; in memory)
+  REGISTER_IP_WINDOW_SECONDS     optional  3600
+  TRUST_PROXY_HEADERS            optional  false. Only true behind a proxy you
+                                 control (else X-Forwarded-For can be spoofed)
+  AI_DAILY_LIMIT_PER_USER        optional  20 (1-10000), per UTC day, PostgreSQL
+  AI_DAILY_LIMIT_TOTAL           optional  200 (0-1000000; 0 = no overall cap)
+  AI_BURST_PER_MINUTE            optional  5 (1-600), per user, in memory
+  [BRANCH] Step C:
+  RESEND_API_KEY      SECRET     required to send; use a "Sending access" key
+  RESEND_API_URL                 optional  https://api.resend.com
+  EMAIL_ENABLED                  optional  false. Master switch for sending
+  EMAIL_FROM                     optional  Medstract
+                                 <onboarding@resend.dev> (Resend's test sender;
+                                 it only delivers to the Resend account owner)
+  EMAIL_TEST_RECIPIENTS          optional  "" . Comma-separated allowlist
+  EMAIL_TEST_SENDS_PER_HOUR      optional  5 (1-100), per user, in memory
+  EMAIL_TIMEOUT_SECONDS          optional  15 (up to 60)
+  [UNCOMMITTED] Step D (details: docs/SCHEDULED_DIGESTS.md section 2):
+  DIGEST_DELIVERY_MODE           optional  off (off | dry_run | allowlist)
+  DIGEST_SCHEDULER_ENABLED       optional  false
+  DIGEST_TICK_SECONDS            optional  60 (10-3600)
+  DIGEST_MAX_PER_TICK            optional  10 (1-100)
+  DIGEST_MAX_AI_CALLS_PER_TICK   optional  5 (0-50)
+  DIGEST_DRY_RUN_USE_AI          optional  false
+  DIGEST_LEASE_SECONDS           optional  600 (60-3600)
+  DIGEST_MAX_ATTEMPTS            optional  4 (1-10)
+  DIGEST_SAFE_RETRY_HOURS        optional  23 (up to 23.5; Resend keeps keys 24 h)
+  PUBLIC_APP_URL                 optional  http://localhost:3000 (unsubscribe page)
+  PUBLIC_API_URL                 optional  http://localhost:8010 (one-click
+                                 endpoint; one-click header only if https)
+  UNSUBSCRIBE_IP_MAX_INVALID     optional  30 (in memory)
+  UNSUBSCRIBE_IP_WINDOW_SECONDS  optional  600
 
   Set in backend/.env on the snapshot date (names only):
     NCBI_API_KEY, NCBI_EMAIL, NCBI_TOOL, GEMINI_API_KEY, GEMINI_MODEL.
@@ -743,6 +1240,15 @@ Troubleshooting
   Login seems to work, then you're logged out
       Open http://localhost:3000, not 127.0.0.1. The cookie belongs to
       localhost.
+  "Too many failed login attempts" / "Too many sign-up attempts" (429)
+      [BRANCH] Per-IP limits; wait for the Retry-After time, or restart the
+      backend (the counters are in memory).
+  "You've used all 20 AI analyses for today" (429)
+      [BRANCH] Resets at midnight UTC; raise AI_DAILY_LIMIT_PER_USER in .env
+      for development if needed.
+  New CSS or Tailwind classes don't appear in `npm run dev`
+      A long-running dev server can serve stale CSS after new component folders
+      are added. Restart `npm run dev`; verify with `npm run build`.
   Few "Past Week" results
       PubMed can take a few days to index new papers.
 
@@ -751,55 +1257,144 @@ Troubleshooting
 9. TESTING AND VALIDATION (checks run during this inspection)
 ================================================================================
 
-Commands and results
+Commands and results (2026-10-25, on feature/research-subscriptions, after
+Step D stage 4; Steps A-C committed as f9ef312, Step D uncommitted)
   [1] cd backend && .venv/bin/python -m pytest -q -rs
-      251 passed, 1 skipped, 1 warning in 6.15s
+      574 passed, 1 skipped, 1 warning (397 at commit f9ef312)
       Skipped: tests/test_gemini_live.py (needs RUN_GEMINI_LIVE=1)
       Warning: StarletteDeprecationWarning (the starlette test client wants
       httpx2). Comes from the library, not our code.
-  [2] cd backend && RUN_GEMINI_LIVE=1 .venv/bin/python -m pytest tests/test_gemini_live.py -v
-      tests/test_gemini_live.py::test_live_analysis_of_a_real_paper PASSED
-      1 passed, 2 warnings in 11.96s
-      This made one real PubMed request and one real Gemini request (PMID
-      30903363, college level, model gemini-3.5-flash-lite).
-  [3] .venv/bin/alembic current      -> 566c63628f3c (head); pg_isready -> accepting
+  [2] cd backend && RUN_GEMINI_LIVE=1 .venv/bin/python -m pytest tests/test_gemini_live.py -q
+      1 passed (run on 2026-10-25 during Step B verification, after the test
+      was updated for the login requirement). Makes one real PubMed request
+      and one real Gemini request (PMID 30903363, college level,
+      gemini-3.5-flash-lite). Uses a stand-in user, so it creates no accounts.
+  [3] cd backend && .venv/bin/alembic current      -> 1e29bb4ebd5b (head)
   [4] cd frontend && npx tsc --noEmit           -> exit 0
   [5] cd frontend && npm run lint               -> exit 0, no problems
   [6] cd frontend && npm run build              -> Next.js 16.4.3; compiled;
                                                    routes / , /_not-found , /account
   [7] cd frontend && npm audit --omit=dev       -> found 0 vulnerabilities
-  [8] Live probes of the running servers:
-        GET /health -> {"status":"ok"}
-        GET /api/search -> 200
-        GET /api/auth/me (anonymous) -> 401
-        frontend GET / -> 200
+  [8] Live probes of the running backend:
+        GET /api/search -> 200 (public)
+        POST /api/papers/30903363/analyze (anonymous) -> 401
+        GET /api/subscriptions (anonymous) -> 401
+        GET /api/digests/email-status and POST /api/digests/test-send
+        (anonymous) -> 401
 
 Backend tests per file (collected)
-  tests/test_accounts.py       53  [UNCOMMITTED]  real PostgreSQL test database
-  tests/test_analysis.py       62  Gemini mocked
-  tests/test_search_api.py     49  PubMed mocked (httpx.MockTransport)
+  tests/test_analysis.py       62  Gemini mocked; logs in via dependency override
+  tests/test_accounts.py       53  real PostgreSQL test database
+  tests/test_subscriptions.py  50  [BRANCH] CRUD, persistence, validation,
+                                   duplicates (incl. DB constraint), limits,
+                                   auth, CSRF, ownership, cascade, DB down
+  tests/test_search_api.py     49  PubMed mocked (httpx.MockTransport), CORS
+  tests/test_security.py       38  [BRANCH] AI login, daily/overall/burst
+                                   limits, refunds, concurrency, usage
+                                   endpoint, login/register per-IP limits,
+                                   proxy headers, log redaction, safe errors
+                                   (+1 [UNCOMMITTED]: uvicorn access-log
+                                   lines format correctly and hide tokens)
   tests/test_pubmed_client.py  30
   tests/test_dates.py          22
   tests/test_filters.py        14
   tests/test_ranking.py        10
   tests/test_dedup.py           9
-  tests/test_migrations.py      2  [UNCOMMITTED]  downgrade/upgrade round-trip;
+  tests/test_migrations.py      2  downgrade/upgrade round-trip;
                                    models-vs-migrations check
   tests/test_gemini_live.py     1  opt-in, live
+  [BRANCH] Step C:
+  tests/test_email.py          30  Resend client (mocked), error mapping, no
+                                   secrets/addresses in logs, redaction,
+                                   summary validation, prompt escaping,
+                                   HTML escaping and https-only links
+  tests/test_digests.py        29  endpoints on the test DB: login, CSRF,
+                                   allowlist, recipient can't be chosen,
+                                   switch off / no key, ownership, 1-3 topics,
+                                   hourly limit, provider failure, PubMed
+                                   outage, window fallback, AI failure refund,
+                                   AI limit, withheld summaries
+  Step C mutation checks: removing the allowlist check failed
+  test_addresses_not_on_the_allowlist_are_refused; removing the AI refund
+  failed 2 refund tests. Both restored.
+  [UNCOMMITTED] Step D:
+  tests/test_schedule.py       29  next-run maths: weekday numbering, monthly,
+                                   Kolkata/Chatham/Los Angeles, DST gap and
+                                   repeat, a year of daily/weekly runs
+  tests/test_digest_schedule_db.py 27  next_run_at upkeep via the API, delivery
+                                   constraints, 12-way concurrent insert ->
+                                   1 row, migrations rolled back one at a time
+                                   and re-applied, stage 3 migration guard
+  tests/test_delivery.py       62  engine: modes, dry run, duplicate
+                                   prevention (concurrent ticks/workers),
+                                   advisory lock, global AI cap (atomic,
+                                   per tick), retries and limits, ambiguous
+                                   timeouts and the retry window, crash
+                                   recovery, rechecks before sending, queued
+                                   cancellation, windows, missed runs, logs
+  tests/test_unsubscribe.py    43  tokens (hash only, scrubbed when final - in
+                                   EVERY final state incl. bulk cancellation),
+                                   headers (one-click only over https), GET
+                                   changes nothing, idempotent POST, one-click
+                                   without cookies/CSRF, invalid tokens, rate
+                                   limit, queued deliveries, history API,
+                                   delivery_active
+  tests/test_digest_ops.py     15  CLI status diagnostics, review (masked,
+                                   no tokens), resolve (delivered / not
+                                   delivered / refusals), scheduler heartbeat,
+                                   /health defaults
+  Step D mutation checks (each safeguard removed, tests failed, code restored
+  exactly): weekday numbering, schedule changes ignored, DST fold, claim row
+  lock, uncertain flag before send, retry-window check, recheck before send,
+  ON CONFLICT on scheduling (after adding a test), rebuilt payload on retry,
+  global cap WHERE, missed-run grace, GET unsubscribing, no scrubbing,
+  plaintext token stored, queued deliveries not cancelled, email left on,
+  valid links rate-limited, one-click header over http, no scrub on bulk
+  cancellation (stage 4), access-log args dropped (stage 4). One mutation
+  survived and is equivalent: removing the token format check (malformed
+  tokens are not in the database either).
 
-Unit tests never call PubMed or Gemini over the network. Database tests use
-healthcare_research_test and skip with a clear message if it can't be reached.
+Mutation checks (done during Steps A and B; each protection was temporarily
+removed, the named tests failed, and the code was restored exactly):
+  - subscription ownership filter        -> ownership test failed
+  - subscription topic normalization     -> 5 duplicate/persistence tests failed
+  - login requirement for analysis       -> analysis auth tests failed
+  - per-user WHERE limit                 -> 4 limit tests failed (incl. concurrency)
+  - usage refund                         -> refund tests failed
+  - per-IP failure recording             -> 5 rate-limit tests failed
+  - log redaction installation           -> the INFO-logging key test failed
+
+Browser checks (headless Chrome; scripts are NOT in the repository)
+  - [UNCOMMITTED] Step D stages 3-4, dev servers, throwaway account (deleted):
+    27/27 (history labels and reasons, next run / last sent in the
+    subscription's zone, "not active" badge, /unsubscribe: opening changes
+    nothing, no-referrer + noindex, confirm, repeat, invalid/missing/dry-run
+    links, account after unsubscribe, mobile without horizontal scroll, dark
+    mode, no console errors). Re-run after stage 4: 27/27.
+  - Subscription UI, dev server: 39/39 (bell, dialog fields, duplicates, card
+    action, account list, mobile, dark mode), updated for persistence.
+  - Step A persistence, dev server, real API: 27/27 (survives reloads, edits
+    and deletes persist, duplicate handling incl. server 409, load error +
+    retry, logout clears the list).
+  - Step B, dev server: 16/16 (logged-out prompt, 401, "20 of 20" -> "19 of 20"
+    after one real analysis, limit reached with disabled button and server 429
+    with readable Retry-After, logout).
+  Throwaway accounts used by these checks were deleted afterwards.
+
+Step C live checks
+  - API-level, real PubMed + real Gemini, throwaway account (then deleted, and
+    its AI unit removed from the overall counter): a "leg cancer" preview
+    returned 2 past-week papers, both with AI summaries, in about 3 s; a test
+    send was refused with 503 while EMAIL_ENABLED was false.
+  - Real email: the owner sent one manual test digest from /account and
+    confirmed it arrived (2026-10-25 UTC; see Section 4.12).
 
 Not covered by automated tests in the repository
-  - Frontend: no test runner or tests. Browser flows (search, filters,
-    analysis panel, login dialog, saved searches) were checked in earlier
-    sessions with one-off headless-Chrome scripts that are NOT in the repo.
-    During this inspection the UI was only checked by tsc, lint, build and an
-    HTTP 200 for "/". [UNVERIFIED in this inspection]
+  - Frontend: no test runner or tests. The browser checks above are one-off
+    scripts. [UNVERIFIED in this inspection beyond tsc, lint and build]
   - dev.sh start/shutdown was tested in an earlier session.
     [UNVERIFIED in this inspection]
-  - Gemini output quality is only spot-checked. In one earlier live report,
-    the unlabelled overview slightly overstated the abstract ("mortality").
+  - Gemini output quality is only spot-checked.
 
 
 ================================================================================
@@ -807,41 +1402,62 @@ Not covered by automated tests in the repository
 ================================================================================
 
 Commits (newest first)
+  f9ef312  2026-10-25  Steps A-C: research subscriptions, security hardening,
+                       manual test email digests (feature branch only)
+  96fd5b6  2026-10-24  Milestone 5: accounts, research preferences and saved searches
   071da4d  2026-10-24  Milestone 4: on-demand Gemini paper analysis
-                       (22 files changed, 1566 insertions, 43 deletions)
   2fc0d01  2026-10-24  Initial commit: PubMed research search app (Milestones 1-3)
-                       (65 files changed, 11060 insertions)
+  (Dates are the Mac's local time, EDT; the Step C email was confirmed on
+  2026-10-25 UTC, i.e. the evening of 2026-10-24 local time.)
 
-Remote: main is 1 commit ahead of origin/main (071da4d isn't pushed).
+Branches
+  main                            = origin/main at 96fd5b6 (0 ahead, 0 behind)
+  feature/research-subscriptions  current; at f9ef312, 1 commit ahead of main;
+                                  no upstream (never pushed)
 
-Uncommitted working tree (before this file was added)
-  17 tracked files modified or deleted (619 insertions, 65 deletions):
-    README.md, backend/.env.example, backend/app/config.py, backend/app/main.py,
-    backend/app/models.py, backend/requirements.txt, backend/tests/conftest.py,
-    backend/tests/test_search_api.py, frontend/src/app/layout.tsx,
-    frontend/src/app/page.tsx,
-    frontend/src/components/auth/LoginButton.tsx (deleted),
-    frontend/src/components/layout/SiteHeader.tsx,
-    frontend/src/components/search/ResearchSearch.tsx,
-    frontend/src/components/search/SearchHero.tsx,
-    frontend/src/lib/api/client.ts, frontend/src/lib/api/types.ts,
-    frontend/src/lib/filters.ts
-  Untracked (new):
-    PROJECT_HISTORY.md, backend/alembic.ini, backend/app/db.py,
-    backend/app/db_models.py, backend/app/routers/{account,auth,deps}.py,
-    backend/app/services/auth.py, backend/migrations/,
-    backend/tests/test_accounts.py, backend/tests/test_migrations.py,
-    frontend/src/app/account/, frontend/src/components/account/,
-    frontend/src/components/auth/{AccountMenu,AuthDialog,AuthProvider}.tsx,
-    frontend/src/components/saved/
-  Plus PROJECT_DOCUMENTATION.txt and a one-line README link (this task).
+Uncommitted Step D work on feature/research-subscriptions (stages 1-4)
+  When this section was written (2026-10-25): 45 files, 25 modified + 20 new.
+  Modified (tracked):
+    PROJECT_DOCUMENTATION.txt, PROJECT_HISTORY.md, README.md,
+    backend/.env.example, backend/requirements.txt (tzdata),
+    backend/app/config.py, db_models.py, logging_setup.py, main.py, models.py,
+    backend/app/routers/digests.py, subscriptions.py,
+    backend/app/services/digest.py, digest_render.py, email.py,
+    backend/tests/conftest.py, test_digests.py, test_search_api.py,
+    test_security.py,
+    frontend/src/components/account/AccountPage.tsx, TestDigestPanel.tsx,
+    frontend/src/components/subscriptions/SubscriptionList.tsx,
+    frontend/src/lib/api/client.ts, types.ts, frontend/src/lib/subscriptions.ts
+  New (untracked):
+    backend/app/jobs/__init__.py, backend/app/jobs/digests.py,
+    backend/app/routers/unsubscribe.py, backend/app/scheduler.py,
+    backend/app/services/delivery.py, schedule.py, unsubscribe.py,
+    backend/migrations/versions/20261025_96d41bf41bda_digest_delivery_scheduling.py,
+    backend/migrations/versions/20261025_b4bb321bb07f_digest_delivery_payload.py,
+    backend/migrations/versions/20261025_1e29bb4ebd5b_unsubscribe_tokens_per_delivery.py,
+    backend/tests/test_delivery.py, test_digest_ops.py,
+    test_digest_schedule_db.py, test_schedule.py, test_unsubscribe.py,
+    docs/SCHEDULED_DIGESTS.md,
+    frontend/src/app/unsubscribe/page.tsx,
+    frontend/src/components/account/DeliveryHistory.tsx,
+    frontend/src/components/unsubscribe/UnsubscribeConfirm.tsx,
+    frontend/src/lib/deliveries.ts
+  Not committed, ever: backend/.env and frontend/.env.local.
+  Migration state: the local app database is at 1e29bb4ebd5b (all three Step D
+  revisions applied; a pg_dump backup was taken before each, outside the
+  repository). The committed code (f9ef312) knows only up to bd806695a174, so
+  checking out f9ef312 or main against this database would meet unknown
+  revisions: commit Step D, or downgrade first
+  (`alembic downgrade bd806695a174` removes the Step D tables and history).
 
 Repository conventions
-  - Branch main. Commit messages say what changed and why, and end with a
-    Co-Authored-By trailer when written with an AI assistant.
+  - Owner's rules for the feature branch: verify the branch and working tree
+    first; never commit, push, merge, rebase or switch branches unless asked.
+  - Commit messages say what changed and why, and end with a Co-Authored-By
+    trailer when written with an AI assistant.
   - Before every commit: stage, inspect the staged file list, and scan it for
     secret values. Never commit .env or .env.local.
-  - Schema changes go through Alembic revisions only.
+  - Schema changes go through Alembic revisions only, additive where possible.
   - Pinned dependency versions in requirements.txt.
 
 
@@ -849,28 +1465,59 @@ Repository conventions
 11. KNOWN LIMITATIONS AND OUTSTANDING ISSUES
 ================================================================================
 
-Security (fine for local use; must be fixed before any public deployment)
-  S1. POST /api/papers/{pmid}/analyze needs no login and has no rate limit or
-      quota. Anyone who can reach the backend can use up the Gemini quota.
-  S2. POST /api/auth/register has no throttling (automated sign-ups), and its
-      409 reveals which emails are registered.
-  S3. The login throttle counts per email only and lives in memory. There is no
-      per-IP limit (one password tried against many emails isn't slowed down),
-      and it resets on restart.
-  S4. NCBI requires api_key as a URL parameter, and httpx logs full request
-      URLs at INFO level. Nothing logs at INFO today, so no leak was observed,
-      but turning on INFO logging would write NCBI_API_KEY to the logs.
-  S5. Production-unsafe defaults: SESSION_COOKIE_SECURE=false and
-      CORS_ALLOW_LOCAL_ORIGINS=true.
-  S6. No security headers (CSP, X-Frame-Options, X-Content-Type-Options,
-      Referrer-Policy) on the frontend.
-  S7. Expired sessions are only deleted when that user logs in again.
+Security
+  Resolved on the branch (Step B; see Section 4.10):
+    - AI analysis was public with no limits -> login + atomic daily limits.
+    - Registration had no throttling -> 5 attempts per IP per hour.
+    - Login throttle was per email only -> also 20 failures per IP per 15 min.
+    - NCBI key could appear in INFO-level logs -> loggers quieted + redaction.
+    - Raw exception text in PubMed errors -> generic user-facing messages.
+  Still open:
+    S1. In-memory rate limits (login per email/IP, registration per IP, AI
+        burst) suit the current single-process development setup but are NOT
+        shared across multiple workers or servers and reset on restart. Use a
+        shared store (Redis or PostgreSQL) before scaling out. The DAILY AI
+        limits are in PostgreSQL and are shared.
+    S2. Registration's 409 still reveals which emails are registered (kept for
+        usability; rate limiting makes probing slow).
+    S3. Production-unsafe defaults: SESSION_COOKIE_SECURE=false and
+        CORS_ALLOW_LOCAL_ORIGINS=true.
+    S4. No security headers (CSP, X-Frame-Options, X-Content-Type-Options,
+        Referrer-Policy) on the frontend.
+    S5. Expired sessions are only deleted when that user logs in again.
+    S6. Search is public with no rate limit (owner's decision for Step B);
+        NCBI calls are still throttled server-side.
+    S7. Users behind one shared IP (e.g. a campus network) share the per-IP
+        login/registration allowance.
 
 Functional gaps
   F1. No cross-paper synthesis.
-  F2. No periodic reports: no scheduler, no "new since last check" tracking,
-      no report storage, no email.
-  F3. AI analyses aren't stored or cached; every request costs Gemini quota.
+  F2. Scheduled delivery exists only in test form [UNCOMMITTED]: off by
+      default, dry_run, or allowlist (approved addresses only). Sending to
+      other users is NOT possible: it needs a verified sending domain (DKIM)
+      and account email verification, neither of which exists. No scheduled
+      email has been sent yet (only Step C's manual test email).
+  F2d. One-click unsubscribe can't work locally: it needs an https
+      PUBLIC_API_URL and email from a DKIM-verified domain. Locally only the
+      body link (http://localhost, this computer only) works.
+  F2e. The stored copy of a scheduled email holds its unsubscribe token while
+      the delivery is pending/sending: at most its grace period (6 h daily,
+      24 h weekly/monthly) while anything ticks, but indefinitely if nothing
+      ticks at all (scheduler disabled and no run-once); scrubbed on every
+      final status, including expiry. Database backups taken in
+      that window, Resend's logs and the recipient's mailbox also hold it. A
+      leaked token can only unsubscribe that one subscription.
+  F2f. Scheduler heartbeat and per-tick limits are in memory (this process).
+      Routine tick summaries log at INFO, which uvicorn's console hides; use
+      /health or the status command.
+  F2b. Email can only reach the Resend account owner's address until a domain
+      the owner controls is verified in Resend (ufl.edu can't be). Test
+      emails from resend.dev may land in spam. Resend's free plan: 3,000
+      emails/month, 100/day.
+  F2c. Each preview or test send runs the AI again (1 unit per topic); there
+      is no caching between a preview and the send.
+  F3. Successful AI analyses aren't cached; re-analyzing the same paper uses
+      another unit of the daily allowance.
   F4. No saved-papers library.
   F5. Personalization is shallow: interests are quick-search chips only and
       don't affect ranking.
@@ -888,52 +1535,62 @@ Quality and technical debt
       page state survives navigation. UI code and tests must allow for this.
   Q7. React Strict Mode runs effects twice in `next dev` only, so test UI
       flows on the dev server as well as on a production build.
+  Q8. PROJECT_HISTORY.md summarizes the branch work briefly; this file has
+      the details.
+  Q9. The frontend doesn't read the Retry-After header; for 429s it shows the
+      server's message (the daily reset time comes from /api/me/ai-usage).
 
-Missing configuration: none for local use. All required variables are set, and
-the live Gemini test passed.
+Missing configuration: none for local use. All required variables are set.
 
 
 ================================================================================
 12. FUTURE ROADMAP (PLANS, NOT COMPLETED FEATURES)
 ================================================================================
 
-Note: user research preferences and saved searches are already implemented
-(Section 4.8), but [UNCOMMITTED]. Their first roadmap step is to commit them.
+Done on the branch (not committed):
+  Step A  persistent research subscriptions                    [BRANCH]
+  Step B  security hardening                                    [BRANCH]
+  Step C  manual test email digests (Resend)                    [BRANCH]
+  Steps A-C committed as f9ef312 (not pushed).
+  Step D  scheduled delivery, stages 1-4 (test modes only)       [UNCOMMITTED]
+Note: the owner renumbered the steps: C = manual email testing (done),
+D = automatic scheduled delivery. In-app reports with cross-paper synthesis
+(R3 below) is no longer lettered.
 
 R0. Housekeeping                                              [PLANNED]
-  Commit the Milestone 5 work, and push 071da4d plus the new commits.
+  Review and commit Step D; run the dry-run walkthrough (docs/SCHEDULED_DIGESTS.md
+  section 5) and, if wanted, one allowlist run to your own address; push and
+  merge the branch into main when ready.
 
-R1. Safeguards before more AI usage                           [PLANNED]
-  - Require login for AI features; a per-user daily Gemini quota.
-  - Per-IP throttling for login and registration.
-  - Set the httpx logger to WARNING (fixes S4).
-
-R2. Stored analyses                                           [PLANNED]
+R1. Stored analyses                                           [PLANNED]
   A paper_analyses table keyed by (pmid, summary_level, model, prompt_version).
-  Repeat requests are served from the database.
+  Repeat requests are served from the database without using the allowance.
 
-R3. Personalized paper discovery                              [PLANNED]
-  Use research interests (and saved searches) to build a personal feed; give
+R2. Personalized paper discovery                              [PLANNED]
+  Use research interests (and subscriptions) to build a personal feed; give
   ranking a small boost for interest terms; optionally a saved-papers library.
 
-R4. Cross-paper synthesis                                     [PLANNED]
-  - One Gemini request over the top N papers of a search or saved search.
-  - Output: themes, agreement, conflicts, evidence strength, gaps, open
-    questions.
-  - Every claim cites PMIDs. Citations are checked against the input set, and
-    any PMID not in the set is rejected.
+R3. In-app research reports with synthesis                    [PLANNED]
+  - For each subscription: find PMIDs that are new since last_checked_at.
+  - One Gemini synthesis per report over the top N new papers: themes,
+    agreement, conflicts, evidence strength, gaps, open questions; every claim
+    cites PMIDs, and citations are checked against the input set (any PMID
+    not in the set is rejected).
+  - Store a research_reports row; "Generate now" button; Reports page.
+  - A scheduler job honoring each subscription's frequency, day, time and time
+    zone; uses the daily AI limits from Step B.
 
-R5. Scheduled research reports                                [PLANNED]
-  - Per saved search: last_checked_at and a frequency.
-  - A job finds new PMIDs since the last run, synthesizes them, and stores a
-    research_reports row. "Generate now" button; Reports page in the app.
-  - Email delivery later, after choosing a provider (needs the owner's
-    approval; some providers cost money).
+R4. Sending scheduled digests to real users                   [PLANNED]
+  Step D built the engine in test modes. Before any "live" mode: account email
+  verification, a verified sending domain (SPF/DKIM/DMARC) with https
+  PUBLIC_* URLs, an always-on host (R5), retention/cleanup for stored email
+  payloads, and a shared store for in-memory limits.
 
-R6. Deployment                                                [PLANNED]
+R5. Deployment                                                [PLANNED]
   Docker, CI (pytest + tsc + lint + build), production settings
-  (SESSION_COOKIE_SECURE=true, CORS_ALLOW_LOCAL_ORIGINS=false, CORS_ORIGINS),
-  security headers, HTTPS hosting.
+  (SESSION_COOKIE_SECURE=true, CORS_ALLOW_LOCAL_ORIGINS=false, CORS_ORIGINS,
+  TRUST_PROXY_HEADERS behind the proxy), a shared rate-limit store, security
+  headers, HTTPS hosting.
 
 
 ================================================================================
@@ -943,15 +1600,18 @@ R6. Deployment                                                [PLANNED]
 Start here
   1. Read this file, then README.md, then PROJECT_HISTORY.md.
   2. Inspect the current state; don't trust any document blindly:
+       git branch --show-current
        git status --short
        git log --oneline -5
        git rev-list --left-right --count origin/main...main
        pg_isready
        cd backend && .venv/bin/alembic current
-  3. Confirm a green baseline BEFORE changing anything:
+  3. If you were asked to work on feature/research-subscriptions: confirm the
+     branch first and stop if it's wrong or the tree has unexpected changes.
+  4. Confirm a green baseline BEFORE changing anything:
        cd backend && .venv/bin/python -m pytest -q
        cd frontend && npx tsc --noEmit && npm run lint && npm run build
-  4. Live Gemini check (optional; uses 1 free-tier request):
+  5. Live Gemini check (optional; uses 1 free-tier request):
        cd backend && RUN_GEMINI_LIVE=1 .venv/bin/python -m pytest tests/test_gemini_live.py -v
 
 Rules for safe changes
@@ -962,21 +1622,29 @@ Rules for safe changes
         without echoing it.
       - Before committing, stage the files, list them, and scan the staged diff
         for the real key values.
+      - Log through `logging`; app/logging_setup.py redacts secrets. Never
+        lower the httpx/httpcore loggers below WARNING.
   - PubMed stays the only literature source. All NCBI access goes through
     app/services/pubmed.py (PubMedClient). Don't add a second client.
   - All Gemini access goes through app/services/gemini.py (ReportGenerator).
     Tests must mock it; unit tests must never make paid or live calls.
+  - Every new Gemini-calling path must go through AiUsageGuard (reserve before
+    the call, refund on failure) so the daily limits stay meaningful.
   - Analysis content must come from PubMed by PMID, never from text sent by the
     browser.
   - Database changes:
       1. Edit app/db_models.py.
       2. Run: .venv/bin/alembic revision --autogenerate -m "..."
       3. Review the generated file (expression indexes such as lower(email)
-         need checking).
+         need checking; CHECK constraints need IS NOT NULL where a value is
+         required, because NULL comparisons pass a CHECK).
       4. Run: .venv/bin/alembic upgrade head
+      Keep migrations additive; never delete existing data.
       tests/test_migrations.py fails if the models and migrations drift apart.
   - Database tests empty the tables in healthcare_research_test. Never point
     TEST_DATABASE_URL at a database whose name doesn't end in _test.
+  - Don't send repeated failed logins to the running dev backend: your browser
+    shares 127.0.0.1, so you would rate-limit yourself (restart clears it).
   - Backend error messages must be safe to show users. Map new failures in
     app/routers/errors.py, and never forward provider messages.
   - The frontend talks to the backend only through src/lib/api/client.ts. Keep
@@ -987,14 +1655,15 @@ Rules for safe changes
     build fails.
   - Test UI changes in `npm run dev` (Strict Mode double-runs effects) AND in a
     production build. Allow for preserved routes: check visibility in browser
-    tests.
-  - Ports: backend 8010, frontend 3000. Use spare ports (e.g. 8021-8023 /
-    3021-3023) for throwaway test servers, and stop them afterwards.
+    tests. Restart `npm run dev` if new CSS doesn't appear.
+  - Ports: backend 8010, frontend 3000. Use spare ports (e.g. 8021-8024 /
+    3021-3024) for throwaway test servers, and stop them afterwards.
 
 Where to start on the roadmap
-  Do R0 (commit and push), then R1 (safeguards), before R4/R5. Scheduled
-  reports multiply Gemini usage, so the quota and auth safeguards must come
-  first.
+  R0 (review and commit Step D) first. Every new Gemini call must go through
+  AiUsageGuard (or the scheduler's GlobalAiBudget), and every email through
+  services/email.py with the Step C/D safety checks. Never resend a
+  needs_review delivery by hand: use `python -m app.jobs.digests resolve`.
 
 ================================================================================
 END OF DOCUMENT

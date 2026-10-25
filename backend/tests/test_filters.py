@@ -4,9 +4,9 @@ from datetime import date
 
 import pytest
 
-from app.models import ArticleType, Language, Period
+from app.models import ArticleType, Period
 from app.services.dates import combine_period_and_range, period_start
-from app.services.filters import ARTICLE_TYPE_TERMS, LANGUAGE_TERMS, build_pubmed_term
+from app.services.filters import ARTICLE_TYPE_TERMS, build_pubmed_term
 
 # ---------- query building ----------
 
@@ -20,22 +20,19 @@ def test_article_types_are_ored_and_anded_with_query():
     assert term == '(asthma) AND ("Review"[pt] OR "Meta-Analysis"[pt])'
 
 
-def test_types_and_languages_combined():
-    term = build_pubmed_term(
-        "asthma OR copd", [ArticleType.RANDOMIZED_CONTROLLED_TRIAL], [Language.ENGLISH, Language.SPANISH]
-    )
-    # Parentheses keep the user's OR from swallowing the filters.
-    assert term == '(asthma OR copd) AND ("Randomized Controlled Trial"[pt]) AND (english[la] OR spanish[la])'
+def test_users_or_cannot_swallow_the_type_filter():
+    term = build_pubmed_term("asthma OR copd", [ArticleType.RANDOMIZED_CONTROLLED_TRIAL])
+    # Parentheses keep the user's OR from swallowing the filter.
+    assert term == '(asthma OR copd) AND ("Randomized Controlled Trial"[pt])'
 
 
 def test_repeated_filter_values_are_deduplicated():
-    term = build_pubmed_term("asthma", [ArticleType.REVIEW, ArticleType.REVIEW], [Language.FRENCH] * 3)
-    assert term == '(asthma) AND ("Review"[pt]) AND (french[la])'
+    term = build_pubmed_term("asthma", [ArticleType.REVIEW, ArticleType.REVIEW])
+    assert term == '(asthma) AND ("Review"[pt])'
 
 
 def test_every_enum_value_has_a_pubmed_term():
     assert set(ARTICLE_TYPE_TERMS) == set(ArticleType)
-    assert set(LANGUAGE_TERMS) == set(Language)
 
 
 # ---------- relative periods ----------

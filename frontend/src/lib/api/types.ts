@@ -19,18 +19,6 @@ export type ArticleType =
   | "guideline"
   | "practice_guideline";
 
-/** Supported article languages (backend `Language`). */
-export type Language =
-  | "english"
-  | "spanish"
-  | "french"
-  | "german"
-  | "chinese"
-  | "japanese"
-  | "italian"
-  | "portuguese"
-  | "russian";
-
 export interface Author {
   name: string;
   affiliation: string | null;
@@ -69,7 +57,6 @@ export interface SearchResponse {
   end_date: string | null;
   period: Period;
   article_types: ArticleType[];
-  languages: Language[];
   /** The exact term sent to PubMed ESearch, including filter tags. */
   pubmed_query: string;
   duplicates_removed: number;
@@ -87,7 +74,6 @@ export interface SearchParams {
   includeUndated?: boolean;
   period?: Period;
   articleTypes?: ArticleType[];
-  languages?: Language[];
 }
 
 // ---------- AI paper analysis (backend PaperAnalysis) ----------
@@ -158,7 +144,6 @@ export interface SavedSearchFilters {
   end_date: string | null;
   include_undated: boolean;
   article_types: ArticleType[];
-  languages: Language[];
   max_results: number;
 }
 
@@ -168,4 +153,152 @@ export interface SavedSearch {
   query: string;
   filters: SavedSearchFilters;
   created_at: string;
+}
+
+// ---------- Research subscriptions (backend /api/subscriptions) ----------
+
+/** A stored research subscription (backend `SubscriptionOut`, snake_case). */
+export interface SubscriptionApi {
+  id: string;
+  topic: string;
+  frequency: "daily" | "weekly" | "monthly";
+  /** 0 = Sunday … 6 = Saturday; null unless weekly. */
+  weekday: number | null;
+  /** 1-28; null unless monthly. */
+  month_day: number | null;
+  /** 24-hour "HH:MM". */
+  delivery_time: string;
+  time_zone: string;
+  paper_count: 5 | 10 | 15 | 20;
+  reading_level: SummaryLevel;
+  email_enabled: boolean;
+  email_when_no_new_papers: boolean;
+  /**
+   * True only if the scheduler would really email this subscription now (allowlist test mode, scheduler on,
+   * address allowlisted, email on, not unsubscribed). Manual test emails are separate.
+   */
+  delivery_active: boolean;
+  /** Next scheduled digest (ISO, UTC); null while email is off or unsubscribed. */
+  next_run_at: string | null;
+  /** Last scheduled digest the email service accepted. */
+  last_sent_at: string | null;
+  /** Set when an unsubscribe link in an email was used. */
+  unsubscribed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Create/replace body (backend `SubscriptionIn`). */
+export type SubscriptionInput = Omit<
+  SubscriptionApi,
+  "id" | "delivery_active" | "next_run_at" | "last_sent_at" | "unsubscribed_at" | "created_at" | "updated_at"
+>;
+
+/** Today's AI analysis allowance (backend `AiUsageOut`). Enforced on the server. */
+export interface AiUsage {
+  used: number;
+  limit: number;
+  remaining: number;
+  /** Next reset, ISO 8601 (midnight UTC). */
+  resets_at: string;
+}
+
+// ---------- Research digests (backend /api/digests, Step C: manual test emails) ----------
+
+/** "skipped": AI was deliberately not requested (scheduled dry runs); abstract excerpts are shown. */
+export type DigestAiStatus = "generated" | "limit_reached" | "failed" | "not_needed" | "skipped";
+
+export interface DigestPaper {
+  pmid: string;
+  title: string;
+  authors: string[];
+  journal: string | null;
+  publication_date: string | null;
+  doi: string | null;
+  doi_url: string | null;
+  pubmed_url: string;
+  ai_summary: string | null;
+  abstract_excerpt: string | null;
+  summary_note: string | null;
+}
+
+export interface DigestSection {
+  subscription_id: string;
+  topic: string;
+  frequency: "daily" | "weekly" | "monthly";
+  reading_level: SummaryLevel;
+  window: string;
+  used_fallback: boolean;
+  total_results: number;
+  papers: DigestPaper[];
+  ai_status: DigestAiStatus;
+  ai_note: string | null;
+}
+
+export interface Digest {
+  subject: string;
+  generated_at: string;
+  model: string | null;
+  sections: DigestSection[];
+  disclaimer: string;
+}
+
+/** What a test send would do for the signed-in account (never includes the API key). */
+export interface EmailStatus {
+  enabled: boolean;
+  configured: boolean;
+  recipient: string;
+  recipient_allowed: boolean;
+  sender: string;
+  test_sender: boolean;
+  sends_per_hour: number;
+  /** DIGEST_DELIVERY_MODE on the server. */
+  delivery_mode: "off" | "dry_run" | "allowlist";
+  /** DIGEST_SCHEDULER_ENABLED: the scheduler runs inside the backend. */
+  scheduler_enabled: boolean;
+  /** Scheduled digests would be emailed to this account now. */
+  automatic_delivery_active: boolean;
+}
+
+export interface TestSendResult {
+  sent_to: string;
+  /** Resend accepted the email. Not a delivery confirmation. */
+  delivery_status: "accepted";
+  provider_message_id: string;
+  digest: Digest;
+}
+
+// ---------- Scheduled digest history and unsubscribe (backend /api/digests/deliveries, /api/unsubscribe) ----------
+
+export type DeliveryStatus =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "dry_run"
+  | "skipped_no_new"
+  | "skipped_missed"
+  | "skipped_disabled"
+  | "failed"
+  | "needs_review";
+
+/** One scheduled run. Contains no email content or addresses. */
+export interface DigestDelivery {
+  id: string;
+  subscription_id: string;
+  topic: string;
+  scheduled_for: string;
+  status: DeliveryStatus;
+  /** Short fixed code such as "unsubscribed" or "resend_429". */
+  reason: string | null;
+  attempts: number;
+  papers_count: number | null;
+  window_start: string | null;
+  window_end: string | null;
+  sent_at: string | null;
+  mode: "dry_run" | "allowlist" | null;
+}
+
+export interface UnsubscribeResult {
+  status: "subscribed" | "unsubscribed" | "already_unsubscribed";
+  topic: string;
 }

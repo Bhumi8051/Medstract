@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 from types import SimpleNamespace
 
 import httpx
@@ -13,6 +14,7 @@ from app.config import get_settings
 from app.main import app
 from app.models import GeneratedReport, SummaryLevel
 from app.routers.analysis import get_report_generator
+from app.routers.deps import get_ai_usage_guard, require_user
 from app.routers.search import get_pubmed_client
 from app.services.analysis import LEVEL_GUIDANCE, build_prompt, grounding_warnings, parse_report
 from app.services.gemini import AnalysisOutputError, GeminiReportGenerator
@@ -82,6 +84,22 @@ class FakeGenAIClient:
         return self.result
 
 
+FAKE_USER = SimpleNamespace(id=uuid.UUID("00000000-0000-0000-0000-00000000a11c"), email="tester@example.org")
+
+
+class AllowAllUsage:
+    """Usage guard stand-in: never limits, records refunds."""
+
+    def __init__(self) -> None:
+        self.refunds = 0
+
+    async def reserve(self, user_id):
+        return SimpleNamespace(user_id=user_id)
+
+    async def refund(self, reservation) -> None:
+        self.refunds += 1
+
+
 @pytest.fixture
 def analysis_api():
     """configure(generator, efetch_xml) -> TestClient with PubMed and Gemini both mocked."""
@@ -93,6 +111,11 @@ def analysis_api():
         app.dependency_overrides[get_settings] = lambda: settings
         app.dependency_overrides[get_pubmed_client] = lambda: make_client(handler, settings)
         app.dependency_overrides[get_report_generator] = lambda: generator
+        # Analysis now requires login and spends usage (Step B). These tests are about the
+        # analysis itself, so they log in as a fake user with an always-allowing usage guard;
+        # auth and limits are tested in test_security.py.
+        app.dependency_overrides[require_user] = lambda: FAKE_USER
+        app.dependency_overrides[get_ai_usage_guard] = lambda: AllowAllUsage()
         return TestClient(app)
 
     yield configure

@@ -22,11 +22,11 @@ export function ResultsSummary({ data }: ResultsSummaryProps) {
   return (
     <div className="space-y-3">
       <div>
-        <h2 id="results-heading" className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+        <h2 id="results-heading" className="text-xl font-bold tracking-tight text-navy-900 dark:text-navy-50">
           Showing {formatCount(data.returned)} of {formatCount(data.total_results)} PubMed matches
         </h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          for <span className="font-medium text-slate-800 dark:text-slate-200">“{data.query}”</span>, ranked by
+        <p className="mt-1 text-sm text-navy-600 dark:text-navy-400">
+          for <span className="font-medium text-navy-800 dark:text-navy-200">“{data.query}”</span>, ranked by
           keyword match with PubMed&rsquo;s order breaking ties.
         </p>
         {details.length > 0 && (
@@ -34,18 +34,18 @@ export function ResultsSummary({ data }: ResultsSummaryProps) {
             {details.map((detail) => (
               <li
                 key={detail}
-                className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                className="rounded-full bg-navy-100 px-2.5 py-1 font-medium text-navy-700 dark:bg-navy-800 dark:text-navy-300"
               >
                 {detail}
               </li>
             ))}
           </ul>
         )}
-        <details className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          <summary className="cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200">
+        <details className="mt-2 text-xs text-navy-500 dark:text-navy-400">
+          <summary className="cursor-pointer select-none hover:text-navy-700 dark:hover:text-navy-200">
             PubMed query used
           </summary>
-          <code className="mt-1 block rounded bg-slate-100 px-2 py-1.5 font-mono break-words text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+          <code className="mt-1 block rounded bg-navy-100 px-2 py-1.5 font-sans break-words text-navy-800 dark:bg-navy-800 dark:text-navy-200">
             {data.pubmed_query}
           </code>
           {(data.start_date || data.end_date) && (

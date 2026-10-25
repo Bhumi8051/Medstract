@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.config import Settings, get_settings
-from app.models import ArticleType, Language, Period, SearchResponse
+from app.models import ArticleType, Period, SearchResponse
 from app.routers.errors import pubmed_http_error
 from app.services.dates import combine_period_and_range, parse_date_bound
 from app.services.pubmed import PubMedClient, PubMedError
@@ -58,10 +58,6 @@ async def search(
         list[ArticleType] | None,
         Query(description="PubMed publication type; repeat for several (matched with OR)."),
     ] = None,
-    language: Annotated[
-        list[Language] | None,
-        Query(description="Article language; repeat for several (matched with OR)."),
-    ] = None,
     include_undated: Annotated[
         bool, Query(description="Keep papers with no usable date when a date filter is set.")
     ] = False,
@@ -103,7 +99,6 @@ async def search(
             include_undated=include_undated,
             period=period,
             article_types=article_type,
-            languages=language,
         )
     except PubMedError as exc:
         raise pubmed_http_error(exc) from None

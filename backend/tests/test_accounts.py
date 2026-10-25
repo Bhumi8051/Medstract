@@ -247,9 +247,26 @@ FILTERS = {
     "end_date": "2023-06",
     "include_undated": False,
     "article_types": ["review", "meta_analysis"],
-    "languages": ["english"],
     "max_results": 50,
 }
+
+
+def test_saved_searches_from_before_the_language_filter_was_removed_still_load(db_client):
+    """Rows saved earlier contain a "languages" key; it is ignored, not rejected (and the row isn't changed)."""
+    register(db_client)
+    old = db_client.post("/api/saved-searches", json={"query": "asthma children", "filters": FILTERS}).json()
+    run_db(
+        "UPDATE saved_searches SET filters = filters || '{\"languages\": [\"english\"]}'::jsonb WHERE id = :id",
+        {"id": old["id"]},
+    )
+    listed = db_client.get("/api/saved-searches")
+    assert listed.status_code == 200 and listed.json()[0]["filters"] == FILTERS
+    assert db_client.get(f"/api/saved-searches/{old['id']}").json()["filters"] == FILTERS
+    stored = run_db("SELECT filters->'languages' FROM saved_searches WHERE id = :id", {"id": old["id"]})[0][0]
+    assert stored == ["english"]  # stored data untouched
+    # An old browser tab that still sends "languages" when saving isn't rejected either.
+    again = db_client.post("/api/saved-searches", json={"query": "copd", "filters": {**FILTERS, "languages": []}})
+    assert again.status_code == 201 and "languages" not in again.json()["filters"]
 
 
 def test_save_list_get_and_delete(db_client):

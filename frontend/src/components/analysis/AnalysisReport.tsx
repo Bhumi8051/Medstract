@@ -5,17 +5,17 @@ const BASIS_STYLES: Record<EvidenceBasis, { label: string; title: string; classN
   reported: {
     label: "Reported",
     title: "Stated in the PubMed record (title, metadata or abstract)",
-    className: "bg-teal-50 text-teal-900 ring-teal-200 dark:bg-teal-950 dark:text-teal-200 dark:ring-teal-900",
+    className: "bg-brand-50 text-brand-900 ring-brand-200 dark:bg-brand-950 dark:text-brand-200 dark:ring-brand-900",
   },
   interpretation: {
     label: "AI interpretation",
     title: "The AI's explanation or inference; not stated by the authors",
-    className: "bg-violet-50 text-violet-900 ring-violet-200 dark:bg-violet-950 dark:text-violet-200 dark:ring-violet-900",
+    className: "bg-brand-50 text-brand-900 ring-brand-200 dark:bg-brand-950 dark:text-brand-200 dark:ring-brand-900",
   },
   not_reported: {
     label: "Not reported",
     title: "This information is not in the PubMed record",
-    className: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
+    className: "bg-navy-100 text-navy-700 ring-navy-200 dark:bg-navy-800 dark:text-navy-300 dark:ring-navy-700",
   },
 };
 
@@ -49,7 +49,7 @@ function PointList({ points }: { points: ReportPoint[] }) {
           <BasisBadge basis={point.basis} />
           <span
             className={`text-sm leading-relaxed ${
-              point.basis === "not_reported" ? "text-slate-500 italic dark:text-slate-400" : "text-slate-700 dark:text-slate-300"
+              point.basis === "not_reported" ? "text-navy-500 italic dark:text-navy-400" : "text-navy-700 dark:text-navy-300"
             }`}
           >
             {point.text}
@@ -73,10 +73,10 @@ export function AnalysisReport({ analysis, headingId }: AnalysisReportProps) {
   return (
     <section aria-labelledby={headingId} className="space-y-5">
       <header>
-        <h4 id={headingId} className="text-base font-semibold text-slate-900 dark:text-slate-50">
+        <h4 id={headingId} className="text-base font-semibold text-navy-900 dark:text-navy-50">
           AI research report
         </h4>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
           {labelFor(SUMMARY_LEVEL_OPTIONS, analysis.summary_level)} level · {analysis.model}
           {!Number.isNaN(generated.getTime()) && <> · generated {generated.toLocaleString()}</>}
         </p>
@@ -101,7 +101,7 @@ export function AnalysisReport({ analysis, headingId }: AnalysisReportProps) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-navy-500 dark:text-navy-400">
         <span>Labels:</span>
         <BasisBadge basis="reported" />
         <BasisBadge basis="interpretation" />
@@ -109,33 +109,33 @@ export function AnalysisReport({ analysis, headingId }: AnalysisReportProps) {
       </div>
 
       <div>
-        <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Plain-language overview</h5>
-        <p className="mt-1 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{report.plain_language_overview}</p>
+        <h5 className="text-sm font-semibold text-navy-900 dark:text-navy-100">Plain-language overview</h5>
+        <p className="mt-1 text-sm leading-relaxed text-navy-700 dark:text-navy-300">{report.plain_language_overview}</p>
       </div>
 
       {SECTIONS.map((section) => (
         <div key={section.key}>
-          <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{section.title}</h5>
+          <h5 className="text-sm font-semibold text-navy-900 dark:text-navy-100">{section.title}</h5>
           <PointList points={report[section.key]} />
         </div>
       ))}
 
       <div>
-        <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Questions for further investigation</h5>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
+        <h5 className="text-sm font-semibold text-navy-900 dark:text-navy-100">Questions for further investigation</h5>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-navy-700 dark:text-navy-300">
           {report.further_questions.map((question, index) => (
             <li key={index}>{question}</li>
           ))}
         </ul>
       </div>
 
-      <p className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+      <p className="border-t border-navy-200 pt-3 text-xs text-navy-500 dark:border-navy-700 dark:text-navy-400">
         Source: PMID {analysis.pmid} ·{" "}
         <a
           href={analysis.pubmed_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-medium text-teal-800 underline-offset-4 hover:underline dark:text-teal-300"
+          className="font-medium text-brand-800 underline-offset-4 hover:underline dark:text-brand-300"
         >
           {analysis.pubmed_url}
           <span className="sr-only"> (opens in a new tab)</span>

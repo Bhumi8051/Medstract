@@ -100,7 +100,8 @@ class PubMedClient:
                 continue
             except httpx.HTTPError as exc:
                 if is_last:
-                    raise PubMedResponseError(f"Could not reach PubMed {endpoint}: {exc}") from exc
+                    # Exception type only: an httpx message could include the request URL (which carries api_key).
+                    raise PubMedResponseError(f"Could not reach PubMed {endpoint} ({type(exc).__name__})") from exc
                 await self._backoff(attempt)
                 continue
 

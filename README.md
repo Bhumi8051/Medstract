@@ -4,8 +4,6 @@
 
 Researchers waste hours sifting PubMed alerts. Medstract sends a weekly digest of your most relevant new papers, ranked and summarized at your chosen reading level, so you read only what matters.
 
-For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt). For running scheduled digests, see [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md).
-
 - **Backend:** Python, FastAPI and Pydantic, in `backend/`. It calls NCBI E-utilities (ESearch and EFetch).
 - **AI analysis:** Google Gemini, on demand per paper, grounded in the PubMed abstract.
 - **Accounts:** PostgreSQL (SQLAlchemy and Alembic) for users, research preferences and saved searches.
@@ -125,30 +123,3 @@ cd frontend && npm run dev
 | http://localhost:3000 | The app |
 | http://localhost:8010/docs | Interactive API docs |
 | http://localhost:8010/health | Backend health check |
-
-## Checks
-
-```bash
-cd backend && .venv/bin/python -m pytest      # needs PostgreSQL running (uses healthcare_research_test)
-cd frontend && npx tsc --noEmit && npm run lint && npm run build
-```
-
-## Troubleshooting
-
-- **`[Errno 48] Address already in use` or "Port … is already in use".** Something is already using that port, often an earlier copy of the server in another terminal tab. See what it is with `lsof -nP -iTCP:8010 -sTCP:LISTEN`, then stop it with Ctrl+C in its terminal or `kill <PID>`.
-- **"Another next dev server is already running".** Next.js allows one dev server per folder. Stop the existing one; the message shows its PID and URL.
-- **"Could not reach the research API".** Check three things:
-  1. The backend is running (`curl http://localhost:8010/health`).
-  2. `NEXT_PUBLIC_API_URL` is correct.
-  3. CORS allows the page's origin.
-- **Changed `.env` or `.env.local` but nothing happened.** Restart the server. `--reload` only watches `.py` files, and Next.js reads `NEXT_PUBLIC_*` values when it starts.
-- **PubMed error 429 / "rate limit".** Add an `NCBI_API_KEY`, or wait a moment. The backend already retries with backoff.
-- **"API key invalid".** Re-copy the key into `backend/.env` with no quotes or spaces, then restart the backend.
-- **"Accounts are temporarily unavailable…" (503).** Either PostgreSQL isn't running (`pg_isready`; start it with `brew services start postgresql@14`), or the tables are missing or out of date (`cd backend && .venv/bin/alembic upgrade head`). Search and analysis keep working either way.
-- **Login seems to work, but you're logged out again right away.** Open the app at `http://localhost:3000`, not `http://127.0.0.1:3000`. The session cookie belongs to `localhost`, so the browser and the API must both use `localhost`.
-- **Database tests are skipped.** PostgreSQL isn't reachable, or `healthcare_research_test` doesn't exist (`createdb healthcare_research_test`).
-- **Few results for "Past Week".** Recent papers can take a few days to appear in PubMed's date index.
-
-## Not yet implemented
-
-Scheduled digests to anyone other than allowlisted test addresses (this needs a verified sending domain and account email verification), password reset, email verification, and changing or deleting an account from the UI.

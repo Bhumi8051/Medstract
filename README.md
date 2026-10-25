@@ -2,7 +2,7 @@
 
 <h3 align="center"><i>Medical research made readable</i></h3>
 
-Search, filter and rank biomedical papers from **PubMed** (the only literature source).
+Researchers waste hours sifting PubMed alerts. Medstract sends a weekly digest of your most relevant new papers, ranked and summarized at your chosen reading level, so you read only what matters.
 
 For full technical documentation (architecture, API, configuration, test results, known issues and roadmap), see [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt).
 

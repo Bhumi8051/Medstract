@@ -1,4 +1,6 @@
-# Healthcare Research Intelligence Agent
+<h1 align="center">Medstract</h1>
+
+<h3 align="center"><i>Medical research made readable</i></h3>
 
 Search, filter and rank biomedical papers from **PubMed** (the only literature source).
 

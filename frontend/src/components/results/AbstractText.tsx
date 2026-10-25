@@ -17,7 +17,7 @@ export function AbstractText({ abstract }: AbstractTextProps) {
 
   if (!abstract) {
     return (
-      <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm italic text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+      <p className="rounded-lg bg-navy-50 px-3 py-2 text-sm italic text-navy-500 dark:bg-navy-800/50 dark:text-navy-400">
         No abstract available in PubMed for this paper.
       </p>
     );
@@ -30,14 +30,14 @@ export function AbstractText({ abstract }: AbstractTextProps) {
     <div>
       <div
         id={contentId}
-        className={`space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300 ${
+        className={`space-y-2 text-[0.9375rem] leading-7 text-navy-700 dark:text-navy-300 ${
           collapsible && !expanded ? "line-clamp-4" : ""
         }`}
       >
         {sections.map((section, index) => (
           <p key={index}>
             {section.label && (
-              <span className="font-semibold text-slate-900 dark:text-slate-100">{section.label}: </span>
+              <span className="font-semibold text-navy-900 dark:text-navy-100">{section.label}: </span>
             )}
             {section.text}
           </p>
@@ -49,7 +49,7 @@ export function AbstractText({ abstract }: AbstractTextProps) {
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
           aria-controls={contentId}
-          className="mt-2 text-sm font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300"
+          className="mt-2 text-sm font-medium text-brand-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-brand-300"
         >
           {expanded ? "Show less" : "Show full abstract"}
         </button>

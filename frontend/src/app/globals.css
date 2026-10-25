@@ -1,8 +1,107 @@
 @import "tailwindcss";
 
+/* Theme: `dark:` follows data-theme="dark" on <html>, set before the first paint by
+   the inline script in app/layout.tsx (saved choice, else system preference). If
+   that script couldn't run (no JavaScript), there's no data-theme and the system
+   preference applies directly. See src/lib/theme.ts. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+/* One font everywhere (Geist, loaded in app/layout.tsx). The mono stack points at it
+   too, so nothing can fall back to a second family. */
 @theme inline {
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-geist-sans);
+}
+
+/* Medstract palette: two scales whose values switch with the theme.
+   "navy" is the neutral scale (surfaces, borders, text); "brand" is the blue accent
+   (links, focus rings, primary buttons, selected states). In both themes 50 is the
+   lightest shade and 950 the darkest, so a pair like `bg-white dark:bg-navy-900`
+   keeps working. Light theme: warm cream and ivory surfaces with cool ink text and
+   #315DEB actions. Dark theme: built on the blue reference palette
+   (#C0E6FD #80AAD3 #5B86B6 #3F6593 #1B3554 #000F22). Text pairs used in the app
+   meet WCAG AA (4.5:1) in both themes. */
+@theme {
+  /* Light theme values (the dark ones are set below). */
+  --color-navy-50: #faf8f3; /* page background */
+  --color-navy-100: #f3f0e8; /* content sections, chips */
+  --color-navy-200: #e6e0d5; /* borders, dividers */
+  --color-navy-300: #d5cec1; /* control borders */
+  --color-navy-400: #9aa1ae; /* placeholders, icons */
+  --color-navy-500: #5f6a7d; /* secondary text */
+  --color-navy-600: #4a5466;
+  --color-navy-700: #353e51;
+  --color-navy-800: #252d40;
+  --color-navy-900: #172033; /* primary text */
+  --color-navy-950: #0d1424;
+
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dde7ff;
+  --color-brand-200: #bfd0fe;
+  --color-brand-300: #93b0fb;
+  --color-brand-400: #6890f5;
+  --color-brand-500: #4a78f0;
+  --color-brand-600: #3d69ee;
+  --color-brand-700: #315deb; /* primary action */
+  --color-brand-800: #2549c4;
+  --color-brand-900: #1f3c99;
+  --color-brand-950: #172c6b;
+
+  /* Small highlights only (avatar tiles). */
+  --color-highlight: #e8f0a0;
+}
+
+/* Dark theme values, applied wherever `dark:` applies (data-theme="dark", or the
+   system preference when no theme has been chosen). */
+:root {
+  @variant dark {
+    --color-navy-50: #f5f8fc; /* headings */
+    --color-navy-100: #e4ecf5; /* primary text */
+    --color-navy-200: #d0dce9;
+    --color-navy-300: #b8c8da; /* secondary text */
+    --color-navy-400: #93a7be; /* metadata */
+    --color-navy-500: #6f86a2;
+    --color-navy-600: #4f6886;
+    --color-navy-700: #2c4a6e; /* control borders */
+    --color-navy-800: #1b3554; /* borders, major surfaces */
+    --color-navy-900: #10243d; /* cards, panels */
+    --color-navy-950: #000f22; /* page background, navigation */
+
+    --color-brand-50: #eaf6fe;
+    --color-brand-100: #c0e6fd; /* selected states */
+    --color-brand-200: #a0caec;
+    --color-brand-300: #80aad3; /* links */
+    --color-brand-400: #6c98c6;
+    --color-brand-500: #5b86b6;
+    --color-brand-600: #4a74a6;
+    --color-brand-700: #3f6593; /* primary buttons */
+    --color-brand-800: #335580;
+    --color-brand-900: #1b3554;
+    --color-brand-950: #12294a;
+  }
+}
+
+/* The page width and side padding shared by the header, bands and content. */
+@utility page-container {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72rem;
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 2rem;
+  }
 }
 
 /* Subscription bell "ring". Plain CSS classes (not Tailwind utilities) so the
@@ -48,7 +147,18 @@
 }
 
 :root {
-  color-scheme: light dark;
+  /* Native controls, scrollbars and dropdown lists follow the active theme. */
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
 }
 
 body {

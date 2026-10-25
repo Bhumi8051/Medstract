@@ -13,6 +13,7 @@ it only delivers to the Resend account owner's address.
 Nothing here runs automatically; scheduled delivery is Step D.
 """
 
+import logging
 import uuid
 from datetime import date, datetime
 from typing import Annotated
@@ -30,10 +31,12 @@ from app.services.auth import SlidingWindowLimiter
 from app.services.delivery import scheduled_delivery_active
 from app.services.digest import DigestContext, build_digest
 from app.services.digest_render import render_html, render_text
-from app.services.email import EmailError, EmailMessage, EmailSender
+from app.services.email import EmailError, EmailMessage, EmailSender, mask_email
 from app.services.gemini import ReportGenerator
 from app.services.pubmed import PubMedClient, PubMedError
 from app.services.usage import AiUsageGuard
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/digests", tags=["digests"])
 
@@ -154,7 +157,12 @@ async def delivery_history(
 @router.post("/preview", response_model=DigestOut, dependencies=[CSRFProtected])
 async def preview_digest(body: DigestRequest, builder: DigestBuilder) -> DigestOut:
     """Build the digest and return it. Sends nothing. AI summaries use the daily allowance."""
-    return await builder.build(body)
+    digest = await builder.build(body)
+    logger.info(
+        "Digest preview built (nothing sent): topics=%d papers=%d",
+        len(digest.sections), sum(len(s.papers) for s in digest.sections),
+    )
+    return digest
 
 
 @router.post("/test-send", response_model=TestSendOut, dependencies=[CSRFProtected])
@@ -167,19 +175,26 @@ async def send_test_digest(
 ) -> TestSendOut:
     """Send ONE test digest to the signed-in account's own email address."""
     email = builder.email
+
+    def refused(reason: str) -> None:
+        logger.warning("Test digest refused before sending: to=%s reason=%s", mask_email(email), reason)
+
     if not settings.email_enabled:
+        refused("email_disabled")
         raise HTTPException(
             status_code=503,
             detail="Email sending is turned off on the server. Set EMAIL_ENABLED=true in backend/.env "
             "and restart the backend.",
         )
     if settings.resend_key_value is None:
+        refused("no_resend_key")
         raise HTTPException(
             status_code=503,
             detail="Email is not configured on the server: RESEND_API_KEY is missing. "
             "Add it to backend/.env and restart the backend.",
         )
     if not recipient_allowed(email, settings):
+        refused("not_allowlisted")
         raise HTTPException(
             status_code=403,
             detail="Test emails can only go to addresses listed in EMAIL_TEST_RECIPIENTS on the server, "
@@ -188,6 +203,7 @@ async def send_test_digest(
     # Ownership is checked before the limiter, so a bad id doesn't use up an attempt.
     await owned_subscriptions(builder.db, builder.user_id, body.subscription_ids)
     if (wait := limiter.hit(str(builder.user_id))) is not None:
+        refused("hourly_limit")
         raise HTTPException(
             status_code=429,
             detail=f"You can send up to {settings.email_test_sends_per_hour} test emails per hour. "
@@ -196,9 +212,16 @@ async def send_test_digest(
         )
 
     digest = await builder.build(body)
-    message = EmailMessage(to=email, subject=digest.subject, html=render_html(digest), text=render_text(digest))
+    message = EmailMessage(
+        to=email,
+        subject=digest.subject,
+        html=render_html(digest, app_url=settings.public_app_url),
+        text=render_text(digest, app_url=settings.public_app_url),
+    )
     try:
         sent = await sender.send(message, idempotency_key=f"test-digest-{uuid.uuid4()}")
     except EmailError as exc:
-        raise email_http_error(exc) from None
-    return TestSendOut(sent_to=email, provider_message_id=sent.provider_message_id, digest=digest)
+        raise email_http_error(exc) from None  # the sender already logged the failure
+    return TestSendOut(
+        sent_to=email, delivery_status="accepted", provider_message_id=sent.provider_message_id, digest=digest
+    )

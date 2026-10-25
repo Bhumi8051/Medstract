@@ -203,7 +203,7 @@ export function SubscriptionsProvider({ children }: { children: ReactNode }) {
       )}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
         {notice && (
-          <p className="pointer-events-auto flex max-w-lg items-start gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-slate-100 dark:text-slate-900">
+          <p className="pointer-events-auto flex max-w-lg items-start gap-2 rounded-xl bg-navy-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-navy-100 dark:text-navy-900">
             <span aria-hidden="true">🔔</span>
             <span>{notice}</span>
           </p>

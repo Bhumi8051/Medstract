@@ -6,7 +6,7 @@
  * future "saved searches" feature can store it as-is.
  */
 
-import type { ArticleType, Language, Period, SavedSearchFilters, SearchParams, SummaryLevel } from "./api/types";
+import type { ArticleType, Period, SavedSearchFilters, SearchParams, SummaryLevel } from "./api/types";
 
 export type { SummaryLevel };
 
@@ -34,18 +34,6 @@ export const ARTICLE_TYPE_OPTIONS: Option<ArticleType>[] = [
   { value: "practice_guideline", label: "Practice Guideline" },
 ];
 
-export const LANGUAGE_OPTIONS: Option<Language>[] = [
-  { value: "english", label: "English" },
-  { value: "spanish", label: "Spanish" },
-  { value: "french", label: "French" },
-  { value: "german", label: "German" },
-  { value: "chinese", label: "Chinese" },
-  { value: "japanese", label: "Japanese" },
-  { value: "italian", label: "Italian" },
-  { value: "portuguese", label: "Portuguese" },
-  { value: "russian", label: "Russian" },
-];
-
 /** Allowed by the backend's default limits (1-100). */
 export const RESULT_LIMIT_OPTIONS: Option<number>[] = [10, 20, 50, 100].map((n) => ({
   value: n,
@@ -59,7 +47,6 @@ export interface SearchFilters {
   endDate: string;
   includeUndated: boolean;
   articleTypes: ArticleType[];
-  languages: Language[];
   maxResults: number;
 }
 
@@ -69,7 +56,6 @@ export const DEFAULT_FILTERS: SearchFilters = {
   endDate: "",
   includeUndated: false,
   articleTypes: [],
-  languages: [],
   maxResults: 20,
 };
 
@@ -81,7 +67,6 @@ export function toSearchParams(query: string, filters: SearchFilters): SearchPar
     endDate: filters.endDate || undefined,
     includeUndated: filters.includeUndated || undefined,
     articleTypes: filters.articleTypes,
-    languages: filters.languages,
     maxResults: filters.maxResults,
   };
 }
@@ -94,7 +79,6 @@ export function toSavedFilters(filters: SearchFilters): SavedSearchFilters {
     end_date: filters.endDate || null,
     include_undated: filters.includeUndated,
     article_types: filters.articleTypes,
-    languages: filters.languages,
     max_results: filters.maxResults,
   };
 }
@@ -107,7 +91,6 @@ export function fromSavedFilters(saved: SavedSearchFilters): SearchFilters {
     endDate: saved.end_date ?? "",
     includeUndated: saved.include_undated,
     articleTypes: saved.article_types,
-    languages: saved.languages,
     maxResults: saved.max_results,
   };
 }
@@ -118,7 +101,6 @@ export function describeFilters(filters: SearchFilters): string[] {
   if (filters.period !== "all") labels.push(labelFor(PERIOD_OPTIONS, filters.period));
   if (filters.startDate || filters.endDate) labels.push(`${filters.startDate || "Any"} – ${filters.endDate || "Today"}`);
   labels.push(...filters.articleTypes.map((t) => labelFor(ARTICLE_TYPE_OPTIONS, t)));
-  labels.push(...filters.languages.map((l) => labelFor(LANGUAGE_OPTIONS, l)));
   if (filters.maxResults !== DEFAULT_FILTERS.maxResults) labels.push(`${filters.maxResults} results`);
   return labels;
 }
@@ -129,7 +111,6 @@ export function countActiveFilters(filters: SearchFilters): number {
     (filters.period !== DEFAULT_FILTERS.period ? 1 : 0) +
     (filters.startDate || filters.endDate ? 1 : 0) +
     filters.articleTypes.length +
-    filters.languages.length +
     (filters.maxResults !== DEFAULT_FILTERS.maxResults ? 1 : 0)
   );
 }

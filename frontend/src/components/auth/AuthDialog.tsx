@@ -73,14 +73,14 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
   }
 
   const inputClass =
-    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/30 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+    "mt-1 w-full rounded-lg border border-navy-300 bg-white px-3 py-2 text-navy-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30 focus:outline-none dark:border-navy-700 dark:bg-navy-950 dark:text-navy-100";
 
   return (
     <dialog
       ref={dialogRef}
       onClose={onClose}
       aria-labelledby={`${baseId}-title`}
-      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-navy-200 bg-white p-0 text-navy-900 shadow-xl backdrop:bg-navy-900/50 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
     >
       <form onSubmit={handleSubmit} noValidate className="space-y-4 p-6">
         <div className="flex items-start justify-between gap-4">
@@ -88,7 +88,7 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
             <h2 id={`${baseId}-title`} className="text-lg font-semibold">
               {isRegister ? "Create your account" : "Log in"}
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-1 text-sm text-navy-600 dark:text-navy-400">
               {reason ?? "Save searches and keep your preferred summary level."}
             </p>
           </div>
@@ -96,7 +96,7 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
             type="button"
             onClick={() => dialogRef.current?.close()}
             aria-label="Close"
-            className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:hover:bg-slate-800"
+            className="rounded-md px-2 py-1 text-navy-500 hover:bg-navy-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-navy-400 dark:hover:bg-navy-800"
           >
             ✕
           </button>
@@ -140,7 +140,7 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
             aria-describedby={isRegister ? `${baseId}-password-hint` : undefined}
             className={inputClass}
           />
-          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-navy-500 dark:text-navy-400">
             {isRegister ? (
               <span id={`${baseId}-password-hint`}>At least {PASSWORD_MIN_LENGTH} characters. A passphrase works well.</span>
             ) : (
@@ -151,7 +151,7 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
                 type="checkbox"
                 checked={showPassword}
                 onChange={(e) => setShowPassword(e.target.checked)}
-                className="size-3.5 accent-teal-700"
+                className="size-3.5 accent-brand-700"
               />
               Show
             </label>
@@ -167,17 +167,17 @@ export function AuthDialog({ initialMode, reason, onClose, onLogin, onRegister }
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-lg bg-teal-700 px-4 py-2.5 font-semibold text-white transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-70"
+          className="w-full rounded-lg bg-brand-700 px-4 py-2.5 font-semibold text-white transition hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-70"
         >
           {submitting ? "Please wait…" : isRegister ? "Create account" : "Log in"}
         </button>
 
-        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-center text-sm text-navy-600 dark:text-navy-400">
           {isRegister ? "Already have an account?" : "New here?"}{" "}
           <button
             type="button"
             onClick={() => switchMode(isRegister ? "login" : "register")}
-            className="font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300"
+            className="font-medium text-brand-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-brand-300"
           >
             {isRegister ? "Log in" : "Create an account"}
           </button>

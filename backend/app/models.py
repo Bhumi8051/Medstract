@@ -34,20 +34,6 @@ class ArticleType(StrEnum):
     PRACTICE_GUIDELINE = "practice_guideline"
 
 
-class Language(StrEnum):
-    """Supported PubMed article languages (see services/filters.py for the [la] terms)."""
-
-    ENGLISH = "english"
-    SPANISH = "spanish"
-    FRENCH = "french"
-    GERMAN = "german"
-    CHINESE = "chinese"
-    JAPANESE = "japanese"
-    ITALIAN = "italian"
-    PORTUGUESE = "portuguese"
-    RUSSIAN = "russian"
-
-
 class Author(BaseModel):
     name: str
     affiliation: str | None = None
@@ -101,7 +87,6 @@ class SearchResponse(BaseModel):
     )
     period: Period = Period.ALL
     article_types: list[ArticleType] = Field(default_factory=list)
-    languages: list[Language] = Field(default_factory=list)
     pubmed_query: str = Field(
         default="", description="The exact term sent to PubMed ESearch, including filter tags."
     )
@@ -258,8 +243,16 @@ class SavedSearchFilters(BaseModel):
     end_date: str | None = Field(default=None, max_length=10)
     include_undated: bool = False
     article_types: list[ArticleType] = Field(default_factory=list, max_length=len(ArticleType))
-    languages: list[Language] = Field(default_factory=list, max_length=len(Language))
     max_results: int = Field(default=20, ge=1, le=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_removed_language_filter(cls, data):
+        """The language filter was removed. Saved searches stored before that still
+        contain "languages"; it's dropped instead of rejected, so they keep loading."""
+        if isinstance(data, dict) and "languages" in data:
+            data = {k: v for k, v in data.items() if k != "languages"}
+        return data
 
     @model_validator(mode="after")
     def _check_dates(self) -> "SavedSearchFilters":
@@ -272,7 +265,6 @@ class SavedSearchFilters(BaseModel):
         if start and end and start > end:
             raise ValueError("start_date must be on or before end_date.")
         self.article_types = list(dict.fromkeys(self.article_types))
-        self.languages = list(dict.fromkeys(self.languages))
         return self
 
 
@@ -477,6 +469,11 @@ class EmailStatusOut(BaseModel):
 
 class TestSendOut(BaseModel):
     sent_to: str
+    delivery_status: Literal["accepted"] = Field(
+        default="accepted",
+        description="Resend accepted the email for delivery. This is not a delivery confirmation: "
+        "check the inbox or the Resend dashboard (Emails) for this provider_message_id.",
+    )
     provider_message_id: str
     digest: DigestOut
 

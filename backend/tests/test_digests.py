@@ -172,7 +172,7 @@ def test_email_status_never_reveals_the_key(env):
         "configured": True,
         "recipient": ME,
         "recipient_allowed": True,
-        "sender": "Healthcare Research Agent <onboarding@resend.dev>",
+        "sender": "Medstract <onboarding@resend.dev>",
         "test_sender": True,
         "sends_per_hour": 5,
         "delivery_mode": "off",
@@ -191,7 +191,7 @@ def test_preview_builds_the_digest_and_sends_nothing(env):
     response = preview(env.client, sub)
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["subject"] == "Research digest (test): leg cancer"
+    assert data["subject"] == "Medstract Research Digest (Test): leg cancer"
     assert data["model"] == "fake-gemini"
     [section] = data["sections"]
     assert section["topic"] == "leg cancer" and section["window"] == "Past week"
@@ -223,11 +223,20 @@ def test_test_send_goes_only_to_the_account_email(env):
     assert response.json()["provider_message_id"] == "msg_fake_1"
     [(message, idempotency_key)] = env.mail.sent
     assert message.to == ME
-    assert message.subject == "Research digest (test): leg cancer"
+    assert message.subject == "Medstract Research Digest (Test): leg cancer"
     assert "Leg cancer outcomes in adults" in message.html and "https://pubmed.ncbi.nlm.nih.gov/101/" in message.text
     assert "The authors report on paper 101." in message.html
     assert idempotency_key.startswith("test-digest-")
     assert KEY not in response.text
+
+
+def test_test_send_email_links_to_the_configured_app(env):
+    env.use(public_app_url="https://medstract.example")
+    sign_up(env.client)
+    assert send(env.client, subscribe(env.client)).status_code == 200
+    [(message, _)] = env.mail.sent
+    assert '<a href="https://medstract.example/"' in message.html and "Visit Medstract</a>" in message.html
+    assert "Visit Medstract: https://medstract.example/" in message.text
 
 
 @pytest.mark.parametrize("field", ["to", "recipient", "email"])
@@ -295,7 +304,7 @@ def test_at_most_three_subscriptions_per_digest(env):
     assert send(env.client, *subs).status_code == 422
     response = send(env.client, *subs[:3])
     assert response.status_code == 200
-    assert response.json()["digest"]["subject"] == "Research digest (test): 3 topics"
+    assert response.json()["digest"]["subject"] == "Medstract Research Digest (Test): 3 topics"
     assert env.gen.calls == 3 and env.ai_used() == 3
 
 
@@ -413,3 +422,40 @@ def test_paper_count_and_reading_level_come_from_the_subscription(env):
     sub = subscribe(env.client, reading_level="high_school", paper_count=5)
     preview(env.client, sub)
     assert "high-school" in prompts[0]
+
+
+# ---------------------------------------------------------------- diagnostics
+
+
+def test_test_send_reports_accepted_not_delivered(env):
+    sign_up(env.client)
+    data = send(env.client, subscribe(env.client)).json()
+    assert data["delivery_status"] == "accepted" and data["provider_message_id"] == "msg_fake_1"
+    assert "delivered" not in data
+
+
+def test_preview_is_logged_as_nothing_sent(env, caplog):
+    import logging
+
+    sign_up(env.client)
+    with caplog.at_level(logging.INFO, logger="app"):
+        preview(env.client, subscribe(env.client))
+    assert "Digest preview built (nothing sent): topics=1 papers=2" in caplog.text
+    assert "leg cancer" not in caplog.text  # topics are research content
+
+
+@pytest.mark.parametrize(
+    ("settings", "reason"),
+    [({"email_enabled": False}, "email_disabled"), ({"resend_api_key": None}, "no_resend_key"),
+     ({"email_test_recipients": "other@example.org"}, "not_allowlisted")],
+)
+def test_refused_test_sends_are_logged_with_a_masked_address(env, caplog, settings, reason):
+    import logging
+
+    env.use(**settings)
+    sign_up(env.client)
+    sub = subscribe(env.client)
+    with caplog.at_level(logging.INFO, logger="app"):
+        assert send(env.client, sub).status_code in (403, 503)
+    assert f"Test digest refused before sending: to=a***@example.org reason={reason}" in caplog.text
+    assert ME not in caplog.text and env.mail.sent == []

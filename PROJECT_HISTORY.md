@@ -29,9 +29,10 @@ This file records what has been built, milestone by milestone, and the decisions
 | Step A | Persistent research subscriptions | 301 | `f9ef312` (branch `feature/research-subscriptions`) |
 | Step B | Security hardening (AI login, usage limits, log redaction) | 338 | `f9ef312` |
 | Step C | Manual test email digests (Resend) | 397 | `f9ef312` |
-| Step D | Scheduled digest delivery (test modes only, off by default) | see PROJECT_DOCUMENTATION.txt §9 | same branch, not committed yet |
+| Step D | Scheduled digest delivery (test modes only, off by default) | see PROJECT_DOCUMENTATION.txt §9 | `ab7dd30` |
+| Medstract update | Rebrand, light/dark themes, email polish, typed delivery time | 615 | work after `ab7dd30` |
 
-Commits up to `96fd5b6` are on `main` and on GitHub (`Bhumi8051/Healthcare-Research`). Steps A–C are commit `f9ef312` on `feature/research-subscriptions`, which has never been pushed. Step D is uncommitted work on that branch.
+Commits up to `96fd5b6` are on `main` (GitHub: `Bhumi8051/Healthcare-Research`). Steps A–C are commit `f9ef312` and Step D is commit `ab7dd30`, both on branch `feature/research-subscriptions`. Run `git log` and `git status` for the current state of the branch.
 
 ---
 
@@ -165,7 +166,7 @@ Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sect
   - Each topic gets a PubMed search and one Gemini request summarizing its papers. Summaries are checked against the abstracts, and abstract excerpts are used if AI isn't available.
   - Safety: email is off unless `EMAIL_ENABLED=true`. The recipient is always your own account email, which must be in `EMAIL_TEST_RECIPIENTS`. Sends are limited per hour.
   - **A real test email was delivered on 2026-10-25 (UTC).**
-- **Step D, scheduled delivery (uncommitted):**
+- **Step D, scheduled delivery:**
   - **Off by default.** The modes are `off`, `dry_run` (built, never sent) and `allowlist` (approved addresses only). There's no mode that emails everyone.
   - **How it works:** PostgreSQL is the job queue, and each run of each subscription exists once.
     - Each email is frozen before it's sent, and retries use an idempotency key.
@@ -177,6 +178,22 @@ Full details are in [PROJECT_DOCUMENTATION.txt](PROJECT_DOCUMENTATION.txt) (Sect
     - `/health` shows the scheduler's heartbeat.
     - `/account` shows each subscription's status and the delivery history.
   - **Guide:** [docs/SCHEDULED_DIGESTS.md](docs/SCHEDULED_DIGESTS.md). No scheduled email has been sent yet.
+
+## Medstract update (after Step D)
+
+- **Rebrand:** the app is now called **Medstract**, with its logo and wordmark in the header, a favicon and app icons, and page titles like "Your account · Medstract". Clicking the logo returns to a fresh search page.
+- **Themes:** a light/dark toggle that remembers your choice and otherwise follows the system setting, with no flash on load.
+  - Light theme: warm cream and ivory surfaces.
+  - Dark theme: deep navy surfaces built on a fixed blue palette.
+  - Both themes share one set of colour tokens in `frontend/src/app/globals.css`.
+  - The app uses one font (Geist) throughout.
+- **Layout:** a full-width search band with a settings strip below it, and paper cards with a tinted header row. The account page has a sidebar with jump links to each section.
+- **Search:** the language filter was removed, and the search box placeholder now gives an example query.
+- **Subscriptions:** the delivery time is typed (for example `7:30 PM`) instead of picked from a dropdown. It's validated before saving and stored in the same 24-hour format as before.
+- **Email:**
+  - The sender name is "Medstract" and subjects read "Medstract Research Digest (Test): …".
+  - Every send attempt is logged with a masked address; a success logs Resend's message ID, and a failure logs the error code.
+  - Each digest ends with a "Visit Medstract" link to `PUBLIC_APP_URL` and the time it was sent. The time keeps Gmail from hiding the footer as repeated text.
 
 ---
 

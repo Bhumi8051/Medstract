@@ -87,6 +87,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # Before anything logs: keep API keys and DB passwords out of every log line.
 install_log_redaction(get_settings())
 
+# Show the app's own INFO logs (email send attempts and acceptances, digest ticks) in the
+# backend terminal. Uvicorn only configures its own loggers, so these were otherwise
+# dropped. Redaction above applies to every line.
+_app_log = logging.getLogger("app")
+if not _app_log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+    _app_log.addHandler(_handler)
+    _app_log.setLevel(logging.INFO)
+
 app = FastAPI(title="Healthcare Research Intelligence Agent", lifespan=lifespan)
 # Lets the frontend (a different origin, e.g. localhost:3000) call this API from the browser.
 app.add_middleware(CORSMiddleware, **cors_options(get_settings()))

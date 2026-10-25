@@ -228,7 +228,6 @@ export async function searchPapers(params: SearchParams, signal?: AbortSignal): 
   if (params.period && params.period !== "all") query.set("period", params.period);
   // Repeated keys (?article_type=a&article_type=b) are how FastAPI reads lists.
   for (const type of params.articleTypes ?? []) query.append("article_type", type);
-  for (const language of params.languages ?? []) query.append("language", language);
 
   const data = await requestJson(
     "/api/search",

@@ -270,7 +270,7 @@ def test_allowlisted_delivery_is_sent_once_and_recorded(world):
     assert d["status"] == "sent" and d["attempts"] == 1 and d["uncertain"] is False and d["mode"] == "allowlist"
     [(message, key)] = world.sender.sent
     assert message.to == ME and key == d["key"] and key.startswith("digest-")
-    assert message.subject == "Research digest: leg sarcoma"
+    assert message.subject == "Medstract Research Digest: leg sarcoma"  # no "(Test)": scheduled
     assert "Summary of paper 101." in message.html and "scheduled research digest" in message.html
     assert world.sent_pmids(sub) == {"101", "102"}
     assert run_db("SELECT last_sent_at FROM research_subscriptions WHERE id = :s", {"s": sub})[0][0] is not None
@@ -278,6 +278,16 @@ def test_allowlisted_delivery_is_sent_once_and_recorded(world):
     # A second tick doesn't send it again.
     world.tick(at=DUE + timedelta(minutes=30))
     assert len(world.sender.sent) == 1
+
+
+def test_scheduled_email_links_to_the_configured_app(world):
+    world.configure(public_app_url="https://medstract.example", public_api_url="https://api.medstract.example")
+    add_subscription()
+    world.tick(at=DUE + timedelta(minutes=1))
+    [(message, _)] = world.sender.sent
+    assert '<a href="https://medstract.example/"' in message.html and "Visit Medstract</a>" in message.html
+    assert "Explore more research with Medstract." in message.html
+    assert "Visit Medstract: https://medstract.example/" in message.text
 
 
 def test_scheduled_ai_uses_only_the_overall_cap(world):

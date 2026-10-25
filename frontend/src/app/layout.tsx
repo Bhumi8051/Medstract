@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 
 import { AiUsageProvider } from "@/components/analysis/AiUsageProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SubscriptionsProvider } from "@/components/subscriptions/SubscriptionsProvider";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
 
@@ -12,23 +13,27 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Healthcare Research Intelligence Agent",
-  description: "Search, filter and rank biomedical research papers from PubMed.",
+  // Page titles read "Your account · Medstract"; the home page is just "Medstract".
+  title: { default: "Medstract", template: "%s · Medstract" },
+  applicationName: "Medstract",
+  appleWebApp: { title: "Medstract" },
+  description: "Medstract: search, filter and rank biomedical research papers from PubMed.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} h-full antialiased`}
+      // The inline script below sets data-theme before React hydrates.
+      suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <head>
+        {/* Sets the light/dark theme before the first paint (no flash). See src/lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="flex min-h-full flex-col bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
         <AuthProvider>
           <AiUsageProvider>
             <SubscriptionsProvider>{children}</SubscriptionsProvider>

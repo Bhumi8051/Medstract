@@ -37,7 +37,7 @@ every DIGEST_TICK_SECONDS (if the scheduler runs), or once per `run-once`
 |---|---|---|
 | `pending` | Waiting to send, or waiting to retry at `next_attempt_at` | yes |
 | `sending` | Claimed by a worker until `lease_until` | recovered after the lease |
-| `sent` | Resend accepted it (`provider_message_id` set) | never |
+| `sent` | Resend **accepted** it (`provider_message_id` set). Shown as "Accepted": delivery itself is only visible in the Resend dashboard | never |
 | `dry_run` | Built and stored, deliberately not sent | never |
 | `skipped_no_new` | Nothing new, and the user chose not to get empty digests | never |
 | `skipped_missed` | Too late to send: reason `missed` (nothing was ticking when it was due) or `expired` (it was still queued past its grace period, e.g. while paused) | never |
@@ -64,7 +64,7 @@ Restart the backend after any change: it reads `.env` only at startup.
 | `DIGEST_SAFE_RETRY_HOURS` | `23` | retry an *uncertain* send only within this time of the first attempt |
 | `EMAIL_ENABLED`, `RESEND_API_KEY`, `EMAIL_TEST_RECIPIENTS` | off / none / empty | **all three** are required for `allowlist`. If any is missing, every tick runs as `off` and logs a WARNING saying what's missing; `status` shows `effective: off` |
 | `EMAIL_FROM` | `onboarding@resend.dev` sender | see section 9 |
-| `PUBLIC_APP_URL` | `http://localhost:3000` | the frontend: the `/unsubscribe` page and "Manage your subscriptions" links |
+| `PUBLIC_APP_URL` | `http://localhost:3000` | the frontend: the `/unsubscribe` page, "Manage your subscriptions" links, and the "Visit Medstract" footer link in every digest email (test and scheduled). Use the `https://` address in production |
 | `PUBLIC_API_URL` | `http://localhost:8010` | the backend: the one-click unsubscribe endpoint |
 | `UNSUBSCRIBE_IP_MAX_INVALID` / `UNSUBSCRIBE_IP_WINDOW_SECONDS` | `30` / `600` | invalid unsubscribe tokens per IP per window before 429 (in memory) |
 | `AI_DAILY_LIMIT_TOTAL` | `200` | overall Gemini cap, shared with interactive analyses |
@@ -115,7 +115,7 @@ pg_restore --clean --if-exists -d healthcare_research ~/healthcare_research_back
 .venv/bin/python -m app.jobs.digests resolve <id> --delivered --message-id <resend email id>
 ```
 
-- **What the output shows:** no keys and no unsubscribe tokens; recipient addresses are masked (`b***@gmail.com`).
+- **What the output shows:** no keys and no unsubscribe tokens; recipient addresses are masked (`a***@example.org`).
 - **What `status` checks for:** allowlist mode without full email setup, deliveries needing review, failures in the last 7 days (with what to do), queued deliveries past their grace period (they'll be expired, never sent), deliveries stuck in `sending`, and overdue runs or retries (which usually mean no scheduler is running).
 
 **The scheduler's heartbeat** lives only in the backend process:
@@ -126,6 +126,7 @@ curl -s http://localhost:8010/health
 When the scheduler runs, `digest_scheduler` also includes `last_tick_at`, `last_success_at`, `last_summary`, `last_error` (exception type only), `consecutive_failures` and `stale`. Stale means no tick for more than 3 intervals.
 
 **What appears in the backend terminal:**
+- Every email attempt and its outcome, with the recipient masked (`a***@example.org`) and never the key, subject or body. A success reads `Email accepted by Resend (not a delivery confirmation): … ref=<idempotency key> id=<Resend message id>`; a failure reads `Email send failed: … code=… retryable=… outcome_unknown=…`. Test sends refused before sending log the reason (`email_disabled`, `no_resend_key`, `not_allowlisted`, `hourly_limit`); previews log `nothing sent`.
 - Ticks that need attention (`failed`, `needs_review`, recovered leases) and tick failures are logged as warnings or errors there.
 - Routine tick summaries are logged at INFO level, which the default uvicorn console output doesn't show. Use `/health` or `status` for those.
 

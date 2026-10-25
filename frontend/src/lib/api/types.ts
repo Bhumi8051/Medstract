@@ -19,18 +19,6 @@ export type ArticleType =
   | "guideline"
   | "practice_guideline";
 
-/** Supported article languages (backend `Language`). */
-export type Language =
-  | "english"
-  | "spanish"
-  | "french"
-  | "german"
-  | "chinese"
-  | "japanese"
-  | "italian"
-  | "portuguese"
-  | "russian";
-
 export interface Author {
   name: string;
   affiliation: string | null;
@@ -69,7 +57,6 @@ export interface SearchResponse {
   end_date: string | null;
   period: Period;
   article_types: ArticleType[];
-  languages: Language[];
   /** The exact term sent to PubMed ESearch, including filter tags. */
   pubmed_query: string;
   duplicates_removed: number;
@@ -87,7 +74,6 @@ export interface SearchParams {
   includeUndated?: boolean;
   period?: Period;
   articleTypes?: ArticleType[];
-  languages?: Language[];
 }
 
 // ---------- AI paper analysis (backend PaperAnalysis) ----------
@@ -158,7 +144,6 @@ export interface SavedSearchFilters {
   end_date: string | null;
   include_undated: boolean;
   article_types: ArticleType[];
-  languages: Language[];
   max_results: number;
 }
 
@@ -277,6 +262,8 @@ export interface EmailStatus {
 
 export interface TestSendResult {
   sent_to: string;
+  /** Resend accepted the email. Not a delivery confirmation. */
+  delivery_status: "accepted";
   provider_message_id: string;
   digest: Digest;
 }

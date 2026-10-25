@@ -63,7 +63,7 @@ from app.db_models import AiUsageDailyTotal, DigestDelivery, DigestSentPaper, Re
 from app.models import DigestAiStatus, DigestOut, SubscriptionFrequency
 from app.services.analysis import DISCLAIMER
 from app.services.digest import DigestContext, SubscriptionSnapshot, assemble_section
-from app.services.digest_render import SCHEDULED_NOTICE, render_html, render_text
+from app.services.digest_render import SCHEDULED_NOTICE, SCHEDULED_SUBJECT_PREFIX, render_html, render_text
 from app.services.email import EmailError, EmailMessage, EmailSender
 from app.services.gemini import ReportGenerator
 from app.services.pubmed import PubMedClient, PubMedError
@@ -650,7 +650,7 @@ class DeliveryEngine:
             empty_note=NO_NEW_PAPERS_NOTE,
         )
         digest = DigestOut(
-            subject=f"Research digest: {snapshot.topic}"[:200],
+            subject=f"{SCHEDULED_SUBJECT_PREFIX}: {snapshot.topic}"[:200],
             generated_at=now,
             model=self._generator.model if section.ai_status is DigestAiStatus.GENERATED else None,
             sections=[section],
@@ -664,7 +664,11 @@ class DeliveryEngine:
             headers = list_unsubscribe_headers(self._settings, token)
         else:
             unsubscribe_url = page_url(self._settings, "dry-run-preview")
-        links = {"unsubscribe_url": unsubscribe_url, "manage_url": f"{self._settings.public_app_url.rstrip('/')}/account"}
+        links = {
+            "unsubscribe_url": unsubscribe_url,
+            "manage_url": f"{self._settings.public_app_url.rstrip('/')}/account",
+            "app_url": self._settings.public_app_url,
+        }
 
         delivery, _, _ = await self._load(db, delivery.id, lock=True)
         if not self._owns(delivery, lease):

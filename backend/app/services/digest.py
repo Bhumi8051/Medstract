@@ -44,6 +44,7 @@ from app.services.analysis import (
     _paper_record,
 )
 from app.services.dates import period_start
+from app.services.digest_render import TEST_SUBJECT_PREFIX
 from app.services.gemini import AnalysisError, AnalysisOutputError, ReportGenerator
 from app.services.pubmed import PubMedClient
 from app.services.search_service import search_papers
@@ -320,9 +321,9 @@ async def build_digest(ctx: DigestContext, subscriptions: list[ResearchSubscript
     snapshots = [SubscriptionSnapshot.of(row) for row in subscriptions]
     sections = [await build_section(ctx, s) for s in snapshots]
     if len(sections) == 1:
-        subject = f"Research digest (test): {sections[0].topic}"
+        subject = f"{TEST_SUBJECT_PREFIX}: {sections[0].topic}"
     else:
-        subject = f"Research digest (test): {len(sections)} topics"
+        subject = f"{TEST_SUBJECT_PREFIX}: {len(sections)} topics"
     used_ai = any(s.ai_status is DigestAiStatus.GENERATED for s in sections)
     return DigestOut(
         subject=subject[:200],

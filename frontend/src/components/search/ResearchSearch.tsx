@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -24,6 +24,7 @@ import {
   type SummaryLevel,
 } from "@/lib/filters";
 import { formatCount } from "@/lib/format";
+import { getHomeRequests, subscribeHomeRequests } from "@/lib/homeNavigation";
 import { validateQuery } from "@/lib/validation";
 
 import { SearchHero } from "./SearchHero";
@@ -41,6 +42,8 @@ type SearchState =
  *
  * Signed-in extras: the preferred summary level is applied on login, saved
  * searches open via `/?saved=<id>`, and research interests become quick searches.
+ *
+ * Clicking the logo (HomeLink) returns this page to its initial home screen.
  */
 export function ResearchSearch() {
   const [query, setQuery] = useState("");
@@ -69,18 +72,41 @@ export function ResearchSearch() {
     setSummaryLevel(account.preferences.summary_level);
   }
 
+  // Logo clicked: back to the initial home screen (same pattern as above, so it also
+  // applies while Next.js keeps this page hidden during a visit to another page).
+  // The summary level is kept: it's a preference, not part of a search.
+  const homeRequests = useSyncExternalStore(subscribeHomeRequests, getHomeRequests, () => 0);
+  const [homeRequestsSeen, setHomeRequestsSeen] = useState(homeRequests);
+  if (homeRequests !== homeRequestsSeen) {
+    setHomeRequestsSeen(homeRequests);
+    setQuery("");
+    setQueryError(null);
+    setSubmittedQuery(null);
+    setFilters(DEFAULT_FILTERS);
+    setState({ status: "idle" });
+    setFiltersOpen(false);
+  }
+  // ...and cancel a search that was still running.
+  useEffect(() => {
+    controllerRef.current?.abort();
+  }, [homeRequests]);
+
   async function runSearch(searchQuery: string, searchFilters: SearchFilters) {
     // A new search cancels any request still in flight.
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
+    // A logo click while this runs means "go home": drop the result even if it
+    // arrives before the request is cancelled.
+    const homeRequestsAtStart = getHomeRequests();
+    const stale = () => controller.signal.aborted || getHomeRequests() !== homeRequestsAtStart;
 
     setState({ status: "loading" });
     try {
       const data = await searchPapers(toSearchParams(searchQuery, searchFilters), controller.signal);
-      if (!controller.signal.aborted) setState({ status: "success", data });
+      if (!stale()) setState({ status: "success", data });
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (stale()) return;
       if (error instanceof ApiError) {
         setState({ status: "error", message: error.message, hints: error.hints });
       } else {
@@ -166,7 +192,7 @@ export function ResearchSearch() {
   const activeCount = countActiveFilters(filters);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+    <div>
       <SearchHero
         query={query}
         onQueryChange={(value) => {
@@ -190,19 +216,19 @@ export function ResearchSearch() {
       </p>
 
       {hasSearched && (
-        <div className="grid gap-6 pb-12 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="page-container grid gap-8 pt-8 pb-16 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <aside aria-label="Search filters">
             <button
               type="button"
               onClick={() => setFiltersOpen((open) => !open)}
               aria-expanded={filtersOpen}
               aria-controls="filter-sidebar"
-              className="mb-3 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 lg:hidden dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="mb-3 w-full rounded-lg border border-navy-300 bg-white px-4 py-2 text-sm font-semibold text-navy-800 lg:hidden dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             >
               {filtersOpen ? "Hide filters" : "Show filters"}
               {activeCount > 0 && ` (${activeCount})`}
             </button>
-            <div id="filter-sidebar" className={`${filtersOpen ? "block" : "hidden"} lg:sticky lg:top-4 lg:block`}>
+            <div id="filter-sidebar" className={`${filtersOpen ? "block" : "hidden"} lg:sticky lg:top-6 lg:block`}>
               <FilterSidebar filters={filters} onChange={updateFilters} onClearAll={clearFilters} />
             </div>
           </aside>
@@ -210,7 +236,7 @@ export function ResearchSearch() {
           <section
             aria-labelledby={state.status === "success" ? "results-heading" : undefined}
             aria-busy={state.status === "loading"}
-            className="min-w-0 space-y-5"
+            className="min-w-0 space-y-6"
           >
             <ActiveFilterChips filters={filters} onChange={updateFilters} onClearAll={clearFilters} />
             {state.status === "loading" && <LoadingResults />}

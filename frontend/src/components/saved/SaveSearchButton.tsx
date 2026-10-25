@@ -25,9 +25,9 @@ export function SaveSearchButton({ query, filters }: SaveSearchButtonProps) {
   const inputId = useId();
 
   const linkClass =
-    "font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300";
+    "font-medium text-brand-800 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-brand-300";
   const buttonClass =
-    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 transition hover:border-teal-600 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:text-teal-300";
+    "inline-flex items-center gap-1.5 rounded-lg border border-navy-300 bg-white px-3 py-1.5 text-sm font-medium text-navy-800 transition hover:border-brand-600 hover:text-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none disabled:opacity-60 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100 dark:hover:text-brand-300";
 
   if (authStatus === "unavailable") return null;
   if (authStatus !== "authenticated") {
@@ -45,7 +45,7 @@ export function SaveSearchButton({ query, filters }: SaveSearchButtonProps) {
 
   if (state.status === "saved") {
     return (
-      <p role="status" className="text-sm text-teal-900 dark:text-teal-200">
+      <p role="status" className="text-sm text-brand-900 dark:text-brand-200">
         <span aria-hidden="true">★</span> Saved.{" "}
         <Link href="/account" className={linkClass}>
           View saved searches
@@ -80,7 +80,7 @@ export function SaveSearchButton({ query, filters }: SaveSearchButtonProps) {
   return (
     <form onSubmit={handleSave} className="flex flex-wrap items-end gap-2">
       <div>
-        <label htmlFor={inputId} className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+        <label htmlFor={inputId} className="block text-xs font-medium text-navy-600 dark:text-navy-400">
           Name this search
         </label>
         <input
@@ -89,7 +89,7 @@ export function SaveSearchButton({ query, filters }: SaveSearchButtonProps) {
           maxLength={120}
           autoFocus
           onChange={(e) => setName(e.target.value)}
-          className="mt-1 w-64 max-w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/30 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          className="mt-1 w-64 max-w-full rounded-md border border-navy-300 bg-white px-2 py-1.5 text-sm text-navy-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30 focus:outline-none dark:border-navy-700 dark:bg-navy-950 dark:text-navy-100"
         />
       </div>
       <button type="submit" disabled={state.status === "saving"} className={buttonClass}>

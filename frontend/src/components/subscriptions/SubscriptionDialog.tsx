@@ -7,11 +7,12 @@ import type { SummaryLevel } from "@/lib/api/types";
 import type { Option } from "@/lib/filters";
 import {
   defaultSettings,
-  deliveryTimeOptions,
   describeSchedule,
+  formatTime,
   FREQUENCY_OPTIONS,
   listTimeZones,
   PAPER_COUNT_OPTIONS,
+  parseTypedTime,
   READING_LEVEL_DESCRIPTIONS,
   READING_LEVEL_OPTIONS,
   TOPIC_MAX_LENGTH,
@@ -43,9 +44,9 @@ const FIELD_ORDER: (keyof SettingsErrors)[] = ["topic", "weekday", "monthDay", "
 
 // One look for every text input and select: same height, border, radius and focus ring.
 const controlClass =
-  "block h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:[color-scheme:dark]";
-const labelClass = "mb-1.5 block text-sm font-medium text-slate-800 dark:text-slate-200";
-const hintClass = "mt-1.5 text-xs text-slate-500 dark:text-slate-400";
+  "block h-11 w-full rounded-lg border border-navy-300 bg-white px-3 text-sm text-navy-900 shadow-sm transition focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-navy-700 dark:bg-navy-950 dark:text-navy-100 dark:[color-scheme:dark]";
+const labelClass = "mb-1.5 block text-sm font-medium text-navy-800 dark:text-navy-200";
+const hintClass = "mt-1.5 text-xs text-navy-500 dark:text-navy-400";
 const errorClass = "mt-1.5 text-sm text-red-700 dark:text-red-400";
 
 /** Create or manage a research subscription. Saved to the server; nothing is delivered yet. */
@@ -71,7 +72,8 @@ export function SubscriptionDialog({
   const [pending, setPending] = useState<"saving" | "removing" | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const timeZones = useMemo(() => listTimeZones(), []);
-  const deliveryTimes = useMemo(() => deliveryTimeOptions(), []);
+  // What the user typed; settings.deliveryTime holds it as "HH:MM", or "" while it isn't valid.
+  const [timeText, setTimeText] = useState(() => formatTime(settings.deliveryTime));
   const baseId = useId();
   const id = (name: string) => `${baseId}-${name}`;
   const isEditing = editing !== null;
@@ -143,14 +145,14 @@ export function SubscriptionDialog({
       onClose={onClose}
       aria-labelledby={id("title")}
       aria-describedby={id("status")}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(38rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(38rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-navy-200 bg-white p-0 text-navy-900 shadow-2xl backdrop:bg-navy-900/60 backdrop:backdrop-blur-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
     >
       <form onSubmit={handleSubmit} noValidate>
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-start gap-4 border-b border-slate-200 bg-white/95 px-6 py-5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="sticky top-0 z-10 flex items-start gap-4 border-b border-navy-200 bg-white/95 px-6 py-5 backdrop-blur dark:border-navy-800 dark:bg-navy-900/95">
           <span
             aria-hidden="true"
-            className="grid size-11 shrink-0 place-items-center rounded-full bg-teal-700 text-white shadow-sm"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-700 text-white shadow-sm"
           >
             <BellGlyph ringing className="size-5" />
           </span>
@@ -158,7 +160,7 @@ export function SubscriptionDialog({
             <h2 id={id("title")} className="text-lg leading-tight font-semibold">
               {isEditing ? "Manage research subscription" : "Subscribe to research updates"}
             </h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-1 text-sm text-navy-600 dark:text-navy-400">
               The newest PubMed papers on a topic, summarized at your reading level.
             </p>
           </div>
@@ -166,7 +168,7 @@ export function SubscriptionDialog({
             type="button"
             onClick={() => dialogRef.current?.close()}
             aria-label="Close"
-            className="-mt-1 -mr-2 grid size-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="-mt-1 -mr-2 grid size-9 place-items-center rounded-lg text-navy-500 transition hover:bg-navy-100 hover:text-navy-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:hover:bg-navy-800 dark:hover:text-navy-100"
           >
             <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
@@ -174,7 +176,7 @@ export function SubscriptionDialog({
           </button>
         </div>
 
-        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+        <div className="divide-y divide-navy-200 dark:divide-navy-800">
           {/* Status + topic */}
           <div className="space-y-5 px-6 py-5">
             <div
@@ -226,14 +228,14 @@ export function SubscriptionDialog({
                 </p>
               )}
               {duplicate && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-950 dark:bg-teal-950/40 dark:text-teal-100">
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-950 dark:bg-brand-950/40 dark:text-brand-100">
                   <span>
                     You already follow <strong>&ldquo;{duplicate.topic}&rdquo;</strong>.
                   </span>
                   <button
                     type="button"
                     onClick={() => onSwitchToExisting(duplicate)}
-                    className="font-semibold text-teal-800 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-teal-300"
+                    className="font-semibold text-brand-800 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-brand-300"
                   >
                     Manage that subscription
                   </button>
@@ -300,21 +302,32 @@ export function SubscriptionDialog({
                 <label htmlFor={id("deliveryTime")} className={labelClass}>
                   Delivery time
                 </label>
-                {/* A select rather than <input type="time">: Safari draws time inputs in its own
-                    font and alignment, so this keeps every control identical across browsers. */}
-                <Select
+                <input
                   id={id("deliveryTime")}
-                  value={settings.deliveryTime}
-                  onChange={(value) => update("deliveryTime", value)}
-                  invalid={Boolean(errors.deliveryTime)}
-                >
-                  {deliveryTimes.map((time) => (
-                    <option key={time.value} value={time.value}>
-                      {time.label}
-                    </option>
-                  ))}
-                </Select>
-                {errors.deliveryTime && <p className={errorClass}>{errors.deliveryTime}</p>}
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="e.g., 7:30 PM"
+                  value={timeText}
+                  onChange={(event) => {
+                    setTimeText(event.target.value);
+                    update("deliveryTime", parseTypedTime(event.target.value) ?? "");
+                  }}
+                  // Tidy a valid entry ("7:30pm" -> "7:30 PM") once the user moves on.
+                  onBlur={() => {
+                    const parsed = parseTypedTime(timeText);
+                    if (parsed) setTimeText(formatTime(parsed));
+                  }}
+                  className={controlClass}
+                  aria-invalid={Boolean(errors.deliveryTime)}
+                  aria-describedby={errors.deliveryTime ? id("deliveryTime-error") : undefined}
+                />
+                {errors.deliveryTime && (
+                  <p id={id("deliveryTime-error")} className={errorClass}>
+                    {errors.deliveryTime}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -337,13 +350,13 @@ export function SubscriptionDialog({
               {errors.timeZone && <p className={errorClass}>{errors.timeZone}</p>}
             </div>
 
-            <p className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-              <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-teal-700 dark:text-teal-400" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <p className="flex items-center gap-2 rounded-lg bg-navy-50 px-3 py-2.5 text-sm text-navy-700 dark:bg-navy-800/60 dark:text-navy-300">
+              <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-brand-700 dark:text-brand-400" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="16" rx="2" />
                 <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" />
               </svg>
               <span>
-                <span className="font-medium text-slate-900 dark:text-slate-100">Schedule:</span>{" "}
+                <span className="font-medium text-navy-900 dark:text-navy-100">Schedule:</span>{" "}
                 {describeSchedule(settings)}
               </span>
             </p>
@@ -373,7 +386,7 @@ export function SubscriptionDialog({
 
           {/* Email delivery */}
           <Section title="Email delivery">
-            <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+            <div className="divide-y divide-navy-200 overflow-hidden rounded-xl border border-navy-200 dark:divide-navy-800 dark:border-navy-700">
               <SettingRow
                 htmlFor={id("autoEmail")}
                 title="Automatic email delivery"
@@ -396,7 +409,7 @@ export function SubscriptionDialog({
                 <label
                   htmlFor={id("autoEmail")}
                   aria-hidden="true"
-                  className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-slate-300 transition peer-checked:bg-teal-700 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-600 peer-focus-visible:ring-offset-2 after:absolute after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5 dark:bg-slate-600 dark:peer-focus-visible:ring-offset-slate-900"
+                  className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-navy-300 transition peer-checked:bg-brand-700 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 after:absolute after:left-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5 dark:bg-navy-600 dark:peer-focus-visible:ring-offset-navy-900"
                 />
               </SettingRow>
               <SettingRow
@@ -411,7 +424,7 @@ export function SubscriptionDialog({
                   checked={settings.emailWhenNoNewPapers}
                   disabled={!settings.autoEmail}
                   onChange={(e) => update("emailWhenNoNewPapers", e.target.checked)}
-                  className="size-5 shrink-0 cursor-pointer rounded border-slate-300 accent-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="size-5 shrink-0 cursor-pointer rounded border-navy-300 accent-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </SettingRow>
             </div>
@@ -419,7 +432,7 @@ export function SubscriptionDialog({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-navy-200 bg-white/95 px-6 py-4 backdrop-blur dark:border-navy-800 dark:bg-navy-900/95">
           {isEditing &&
             (confirmingUnsubscribe ? (
               <span className="flex items-center gap-2 text-sm">
@@ -435,7 +448,7 @@ export function SubscriptionDialog({
                 <button
                   type="button"
                   onClick={() => setConfirmingUnsubscribe(false)}
-                  className="h-9 rounded-lg px-2 font-medium text-slate-600 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-slate-300 dark:hover:bg-slate-800"
+                  className="h-9 rounded-lg px-2 font-medium text-navy-600 hover:bg-navy-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-navy-300 dark:hover:bg-navy-800"
                 >
                   Keep
                 </button>
@@ -458,14 +471,14 @@ export function SubscriptionDialog({
             <button
               type="button"
               onClick={() => dialogRef.current?.close()}
-              className="h-11 rounded-lg border border-slate-300 px-5 text-sm font-medium text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="h-11 rounded-lg border border-navy-300 px-5 text-sm font-medium text-navy-800 transition hover:border-navy-400 hover:bg-navy-50 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:border-navy-700 dark:text-navy-100 dark:hover:bg-navy-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={pending !== null}
-              className="h-11 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-slate-900"
+              className="h-11 rounded-lg bg-brand-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-navy-900"
             >
               {pending === "saving"
                 ? "Saving…"
@@ -486,7 +499,7 @@ export function SubscriptionDialog({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="space-y-5 px-6 py-5">
-      <legend className="float-left mb-4 w-full text-base font-semibold text-slate-900 dark:text-slate-50">
+      <legend className="float-left mb-4 w-full text-base font-semibold text-navy-900 dark:text-navy-50">
         {title}
       </legend>
       <div className="clear-both space-y-5">{children}</div>
@@ -518,12 +531,12 @@ function ChoiceGroup<T extends string>({ legend, name, options, value, onChange,
           return (
             <label
               key={option.value}
-              className={`relative flex cursor-pointer rounded-lg border text-sm transition has-focus-visible:ring-2 has-focus-visible:ring-teal-600 has-focus-visible:ring-offset-2 dark:has-focus-visible:ring-offset-slate-900 ${
+              className={`relative flex cursor-pointer rounded-lg border text-sm transition has-focus-visible:ring-2 has-focus-visible:ring-brand-600 has-focus-visible:ring-offset-2 dark:has-focus-visible:ring-offset-navy-900 ${
                 description ? "items-center justify-between gap-4 px-4 py-3" : "h-11 items-center justify-center px-3"
               } ${
                 value === option.value
-                  ? "border-teal-600 bg-teal-50 text-teal-900 ring-1 ring-teal-600 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100 dark:ring-teal-500"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+                  ? "border-brand-600 bg-brand-50 text-brand-900 ring-1 ring-brand-600 dark:border-brand-500 dark:bg-brand-950/50 dark:text-brand-100 dark:ring-brand-500"
+                  : "border-navy-300 bg-white text-navy-700 hover:border-navy-400 hover:bg-navy-50 dark:border-navy-700 dark:bg-navy-950 dark:text-navy-300 dark:hover:bg-navy-800"
               }`}
             >
               <input
@@ -538,15 +551,15 @@ function ChoiceGroup<T extends string>({ legend, name, options, value, onChange,
                 <>
                   <span className="min-w-0">
                     <span className="block font-medium">{option.label}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{description}</span>
+                    <span className="mt-0.5 block text-xs text-navy-500 dark:text-navy-400">{description}</span>
                   </span>
                   <span
                     aria-hidden="true"
                     className={`grid size-5 shrink-0 place-items-center rounded-full border-2 ${
-                      value === option.value ? "border-teal-600 dark:border-teal-400" : "border-slate-300 dark:border-slate-600"
+                      value === option.value ? "border-brand-600 dark:border-brand-400" : "border-navy-300 dark:border-navy-600"
                     }`}
                   >
-                    {value === option.value && <span className="size-2.5 rounded-full bg-teal-600 dark:bg-teal-400" />}
+                    {value === option.value && <span className="size-2.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
                   </span>
                 </>
               ) : (
@@ -590,7 +603,7 @@ function Select({ id, value, onChange, invalid, describedBy, children }: SelectP
       </select>
       <svg
         viewBox="0 0 24 24"
-        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-navy-500 dark:text-navy-400"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -616,10 +629,10 @@ function SettingRow({ htmlFor, title, description, descriptionId, disabled, chil
   return (
     <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${disabled ? "opacity-60" : ""}`}>
       <div className="min-w-0">
-        <label htmlFor={htmlFor} className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+        <label htmlFor={htmlFor} className="block text-sm font-medium text-navy-900 dark:text-navy-100">
           {title}
         </label>
-        <p id={descriptionId} className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+        <p id={descriptionId} className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
           {description}
         </p>
       </div>

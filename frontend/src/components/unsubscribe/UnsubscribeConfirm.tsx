@@ -54,11 +54,11 @@ export function UnsubscribeConfirm() {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center sm:p-8 dark:border-slate-800 dark:bg-slate-900">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Unsubscribe from research digests</h1>
+    <div className="rounded-2xl border border-navy-200 bg-white p-6 text-center sm:p-8 dark:border-navy-800 dark:bg-navy-900">
+      <h1 className="text-xl font-semibold text-navy-900 dark:text-navy-50">Unsubscribe from research digests</h1>
 
       {state.status === "checking" && (
-        <p className="mt-3 text-sm text-slate-600 dark:text-slate-400" aria-live="polite">
+        <p className="mt-3 text-sm text-navy-600 dark:text-navy-400" aria-live="polite">
           Checking your link…
         </p>
       )}
@@ -66,9 +66,9 @@ export function UnsubscribeConfirm() {
       {state.status === "invalid" && (
         <div role="alert" className="mt-4 space-y-2 text-sm">
           <p className="text-red-800 dark:text-red-300">{state.message}</p>
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="text-navy-600 dark:text-navy-400">
             You can manage your subscriptions from{" "}
-            <Link href="/account" className="font-medium text-teal-800 underline underline-offset-4 dark:text-teal-300">
+            <Link href="/account" className="font-medium text-brand-800 underline underline-offset-4 dark:text-brand-300">
               your account
             </Link>
             .
@@ -78,9 +78,9 @@ export function UnsubscribeConfirm() {
 
       {(state.status === "ready" || state.status === "working" || state.status === "error") && (
         <>
-          <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
+          <p className="mt-3 text-sm text-navy-700 dark:text-navy-300">
             Stop scheduled digest emails about{" "}
-            <span className="font-semibold text-slate-900 dark:text-slate-100">&ldquo;{state.topic}&rdquo;</span>?
+            <span className="font-semibold text-navy-900 dark:text-navy-100">&ldquo;{state.topic}&rdquo;</span>?
             Your other subscriptions aren&rsquo;t affected.
           </p>
           {state.status === "error" && (
@@ -92,7 +92,7 @@ export function UnsubscribeConfirm() {
             type="button"
             onClick={() => unsubscribe(state.topic)}
             disabled={state.status === "working"}
-            className="mt-5 inline-flex h-11 items-center rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+            className="mt-5 inline-flex h-11 items-center rounded-lg bg-brand-700 px-5 text-sm font-semibold text-white hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
           >
             {state.status === "working" ? "Unsubscribing…" : "Unsubscribe"}
           </button>
@@ -101,13 +101,13 @@ export function UnsubscribeConfirm() {
 
       {state.status === "done" && (
         <div role="status" className="mt-4 space-y-2 text-sm">
-          <p className="font-medium text-teal-900 dark:text-teal-200">
+          <p className="font-medium text-brand-900 dark:text-brand-200">
             {state.already ? "You were already unsubscribed from" : "You're unsubscribed from"} digests about
             &ldquo;{state.topic}&rdquo;.
           </p>
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="text-navy-600 dark:text-navy-400">
             No more scheduled emails will be sent for this topic. To get them again, turn email back on for it in{" "}
-            <Link href="/account" className="font-medium text-teal-800 underline underline-offset-4 dark:text-teal-300">
+            <Link href="/account" className="font-medium text-brand-800 underline underline-offset-4 dark:text-brand-300">
               your account
             </Link>
             .

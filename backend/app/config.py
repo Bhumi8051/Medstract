@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     email_enabled: bool = False
     # onboarding@resend.dev is Resend's test sender: it only delivers to the address
     # that owns the Resend account. Sending to anyone else needs a verified domain.
-    email_from: str = "Healthcare Research Agent <onboarding@resend.dev>"
+    email_from: str = "Medstract <onboarding@resend.dev>"
     # Comma-separated addresses allowed to receive test digests. Accounts aren't
     # email-verified, so the account email alone isn't proof of ownership.
     email_test_recipients: str = ""
@@ -136,7 +136,8 @@ class Settings(BaseSettings):
     digest_safe_retry_hours: float = Field(default=23.0, gt=0, le=23.5)
 
     # Public addresses used in scheduled emails (Step D unsubscribe links).
-    # PUBLIC_APP_URL: the frontend (the /unsubscribe confirmation page).
+    # PUBLIC_APP_URL: the frontend (the /unsubscribe confirmation page, and the
+    # "Visit Medstract" link in every digest email's footer). https:// in production.
     # PUBLIC_API_URL: this backend (the one-click unsubscribe endpoint). Mail
     # providers only offer one-click unsubscribe for https:// addresses, so the
     # List-Unsubscribe-Post header is added only when this is https.

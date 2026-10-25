@@ -6,7 +6,7 @@ import { useRef } from "react";
 import { useAuth } from "./AuthProvider";
 
 const buttonClass =
-  "shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-slate-800 shadow-sm transition hover:border-teal-600 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:text-teal-300";
+  "shrink-0 rounded-lg border border-navy-200 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-navy-800 transition hover:border-brand-600 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:border-white/40 dark:hover:bg-white/10 dark:focus-visible:ring-brand-400";
 
 /** Top-right account control: "Log in" when signed out, an account menu when signed in. */
 export function AccountMenu() {
@@ -14,7 +14,7 @@ export function AccountMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   if (status === "loading") {
-    return <span aria-hidden="true" className="h-9 w-20 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />;
+    return <span aria-hidden="true" className="h-9 w-20 animate-pulse rounded-lg bg-navy-200 dark:bg-white/10" />;
   }
   if (status !== "authenticated" || !account) {
     return (
@@ -31,7 +31,7 @@ export function AccountMenu() {
       <button type="button" popoverTarget="account-menu" className={`${buttonClass} inline-flex items-center gap-2`}>
         <span
           aria-hidden="true"
-          className="grid size-6 place-items-center rounded-full bg-teal-700 text-xs font-bold text-white uppercase"
+          className="grid size-6 place-items-center rounded-full bg-highlight text-xs font-bold text-navy-950 uppercase"
         >
           {account.user.email[0]}
         </span>
@@ -42,20 +42,20 @@ export function AccountMenu() {
         ref={menuRef}
         id="account-menu"
         popover="auto"
-        className="fixed inset-auto top-16 right-4 m-0 w-64 rounded-xl border border-slate-200 bg-white p-2 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        className="fixed inset-auto top-16 right-4 m-0 w-64 rounded-xl border border-navy-200 bg-white p-2 text-sm shadow-lg dark:border-navy-700 dark:bg-navy-900"
       >
-        <p className="truncate px-3 py-2 text-xs text-slate-500 dark:text-slate-400">Signed in as {account.user.email}</p>
+        <p className="truncate px-3 py-2 text-xs text-navy-500 dark:text-navy-400">Signed in as {account.user.email}</p>
         <Link
           href="/"
           onClick={closeMenu}
-          className="block rounded-lg px-3 py-2 text-slate-800 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-slate-100 dark:hover:bg-slate-800"
+          className="block rounded-lg px-3 py-2 text-navy-800 hover:bg-navy-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-navy-100 dark:hover:bg-navy-800"
         >
           Search
         </Link>
         <Link
           href="/account"
           onClick={closeMenu}
-          className="block rounded-lg px-3 py-2 text-slate-800 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-slate-100 dark:hover:bg-slate-800"
+          className="block rounded-lg px-3 py-2 text-navy-800 hover:bg-navy-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-navy-100 dark:hover:bg-navy-800"
         >
           Preferences &amp; saved searches
         </Link>
@@ -65,7 +65,7 @@ export function AccountMenu() {
             closeMenu();
             await logout().catch(() => undefined);
           }}
-          className="block w-full rounded-lg px-3 py-2 text-left text-slate-800 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none dark:text-slate-100 dark:hover:bg-slate-800"
+          className="block w-full rounded-lg px-3 py-2 text-left text-navy-800 hover:bg-navy-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:text-navy-100 dark:hover:bg-navy-800"
         >
           Log out
         </button>

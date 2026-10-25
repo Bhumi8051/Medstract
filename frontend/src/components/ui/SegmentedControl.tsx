@@ -27,14 +27,14 @@ export function SegmentedControl<T extends string>({
 
   return (
     <fieldset aria-describedby={hint ? hintId : undefined} disabled={disabled} className="min-w-0">
-      <legend className="mb-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+      <legend className="mb-2 text-xs font-semibold tracking-wide text-navy-500 uppercase dark:text-navy-400">
         {legend}
       </legend>
-      <div className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
+      <div className="inline-flex flex-wrap rounded-lg border border-navy-200 bg-navy-50 p-1 dark:border-navy-700 dark:bg-navy-950">
         {options.map((option) => (
           <label
             key={option.value}
-            className="relative cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition has-checked:bg-white has-checked:text-teal-800 has-checked:shadow-sm has-focus-visible:ring-2 has-focus-visible:ring-teal-600 hover:text-slate-900 dark:text-slate-300 dark:has-checked:bg-slate-950 dark:has-checked:text-teal-300 dark:hover:text-white"
+            className="relative cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-navy-600 transition hover:text-navy-900 has-checked:bg-brand-600 has-checked:text-white has-checked:shadow-sm has-focus-visible:ring-2 has-focus-visible:ring-brand-600 has-focus-visible:ring-offset-1 dark:text-navy-300 dark:hover:text-white dark:has-checked:bg-brand-100 dark:has-checked:text-navy-950"
           >
             <input
               type="radio"
@@ -49,7 +49,7 @@ export function SegmentedControl<T extends string>({
         ))}
       </div>
       {hint && (
-        <p id={hintId} className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p id={hintId} className="mt-1 text-xs text-navy-500 dark:text-navy-400">
           {hint}
         </p>
       )}

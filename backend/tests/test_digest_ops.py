@@ -51,7 +51,7 @@ def needs_review(sub: str) -> str:
     return delivery(
         sub, "needs_review", attempts=2, outcome_uncertain=True, error_code="idempotency_window_expired",
         first_attempt_at=datetime(2026, 10, 26, 9, 1, tzinfo=UTC), email_to="ada@example.org",
-        email_subject="Research digest: leg sarcoma", email_html=f"<a href='x?token={TOKEN}'>u</a>",
+        email_subject="Medstract Research Digest: leg sarcoma", email_html=f"<a href='x?token={TOKEN}'>u</a>",
         paper_pmids=["101", "102"],
     )
 
@@ -101,7 +101,7 @@ def test_review_lists_details_with_a_masked_address_and_no_token(ops, capsys):
     review_id = needs_review(sub)
     asyncio.run(cli.review(show_all=False))
     out = capsys.readouterr().out
-    assert review_id in out and "Research digest: leg sarcoma" in out
+    assert review_id in out and "Medstract Research Digest: leg sarcoma" in out
     assert "a***@example.org" in out and "ada@example.org" not in out
     assert TOKEN not in out
     assert "NEVER resent automatically" in out and "resend.com/emails" in out

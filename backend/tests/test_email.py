@@ -16,6 +16,8 @@ from app.logging_setup import REDACTED, install_log_redaction, redact
 from app.models import DigestAiStatus, DigestOut, DigestPaper, DigestSection, SubscriptionFrequency, SummaryLevel
 from app.services.digest import build_summary_prompt, excerpt, parse_summaries
 from app.services.digest_render import TEST_NOTICE, render_html, render_text
+
+APP_URL = "https://medstract.example"  # stands in for PUBLIC_APP_URL
 from app.services.email import (
     EmailMessage,
     EmailNotConfiguredError,
@@ -59,7 +61,7 @@ async def test_send_posts_the_message_to_resend():
     assert request.headers["idempotency-key"] == "key-1"
     body = json.loads(request.content)
     assert body == {
-        "from": "Healthcare Research Agent <onboarding@resend.dev>",
+        "from": "Medstract <onboarding@resend.dev>",
         "to": ["ada@example.org"],
         "subject": "Digest",
         "html": "<p>Hi</p>",
@@ -245,7 +247,7 @@ def digest(**paper_fields) -> DigestOut:
         ai_status=DigestAiStatus.GENERATED,
     )
     return DigestOut(
-        subject="Research digest (test): leg cancer",
+        subject="Medstract Research Digest (Test): leg cancer",
         generated_at=datetime(2026, 10, 25, tzinfo=UTC),
         model="fake",
         sections=[section],
@@ -254,7 +256,7 @@ def digest(**paper_fields) -> DigestOut:
 
 
 def test_html_contains_the_paper_details_links_and_notices():
-    html = render_html(digest())
+    html = render_html(digest(), app_url=APP_URL)
     for expected in [
         "Leg sarcoma outcomes",
         'href="https://pubmed.ncbi.nlm.nih.gov/11/"',
@@ -270,24 +272,179 @@ def test_html_contains_the_paper_details_links_and_notices():
 
 
 def test_html_escapes_everything_from_pubmed_and_gemini():
-    html = render_html(digest(title='<script>alert(1)</script>"', ai_summary="<img src=x onerror=alert(1)>"))
+    html = render_html(digest(title='<script>alert(1)</script>"', ai_summary="<img src=x onerror=alert(1)>"), app_url=APP_URL)
     assert "<script>" not in html and "<img" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;&quot;" in html
 
 
 def test_only_https_links_are_rendered():
-    html = render_html(digest(doi_url="javascript:alert(1)"))
+    html = render_html(digest(doi_url="javascript:alert(1)"), app_url=APP_URL)
     assert "javascript:" not in html
 
 
 def test_fallback_excerpt_and_note_are_shown_without_a_summary():
-    html = render_html(digest(ai_summary=None, abstract_excerpt="We studied legs.", summary_note="AI summary unavailable."))
+    html = render_html(digest(ai_summary=None, abstract_excerpt="We studied legs.", summary_note="AI summary unavailable."), app_url=APP_URL)
     assert "From the abstract:" in html and "We studied legs." in html and "AI summary unavailable." in html
 
 
 def test_plain_text_version_has_links_and_notices():
-    text = render_text(digest())
+    text = render_text(digest(), app_url=APP_URL)
     assert "PubMed: https://pubmed.ncbi.nlm.nih.gov/11/" in text
     assert "DOI: https://doi.org/10.1/abc" in text
     assert "AI summary: The authors report outcomes." in text
     assert TEST_NOTICE in text and "Not medical advice." in text
+
+
+# ---------------------------------------------------------------- Medstract branding
+
+
+def test_email_branding_in_html():
+    from app.services.digest_render import SCHEDULED_NOTICE
+
+    html = render_html(digest(), app_url=APP_URL)
+    assert "MEDSTRACT" in html and "#0b2e4f" in html  # wordmark in the logo's navy
+    assert "<title>Medstract Research Digest (Test): leg cancer</title>" in html
+    assert "Sent by Medstract on Oct 25, 2026 at 00:00 UTC. Research digests from PubMed." in html
+    assert TEST_NOTICE in html  # manual test emails say so
+    assert "Healthcare Research" not in html
+    scheduled = render_html(digest(), SCHEDULED_NOTICE, app_url=APP_URL)
+    assert SCHEDULED_NOTICE in scheduled and TEST_NOTICE not in scheduled  # clearly distinguishable
+
+
+def test_email_branding_in_plain_text():
+    lines = render_text(digest(), app_url=APP_URL).splitlines()
+    assert lines[:2] == ["MEDSTRACT", "========="]
+    assert lines[-1] == "Sent by Medstract on Oct 25, 2026 at 00:00 UTC. Research digests from PubMed."
+    assert TEST_NOTICE in lines
+    assert not any("Healthcare Research" in line for line in lines)
+
+
+def test_subject_formats_keep_test_and_scheduled_apart():
+    from app.services.digest_render import SCHEDULED_SUBJECT_PREFIX, TEST_SUBJECT_PREFIX
+
+    assert f"{TEST_SUBJECT_PREFIX}: breast cancer" == "Medstract Research Digest (Test): breast cancer"
+    assert f"{SCHEDULED_SUBJECT_PREFIX}: breast cancer" == "Medstract Research Digest: breast cancer"
+
+
+def test_sender_display_name_is_medstract_on_the_resend_test_address():
+    assert make_settings().email_from == "Medstract <onboarding@resend.dev>"
+
+
+# ---------------------------------------------------------------- send diagnostics
+
+PRIVATE = EmailMessage(
+    to="ada.lovelace@example.org", subject="Medstract Research Digest (Test): rare disease X",
+    html="<p>confidential findings</p>", text="confidential findings",
+)
+
+
+def _no_private_data(log: str) -> None:
+    assert "ada.lovelace@example.org" not in log  # full address
+    assert KEY not in log and "Bearer" not in log  # credentials
+    assert "rare disease X" not in log and "confidential findings" not in log  # research content
+
+
+@pytest.mark.anyio
+async def test_accepted_send_is_logged_without_claiming_delivery(caplog):
+    resend, _ = sender(lambda r: httpx.Response(200, json={"id": "msg_abc"}))
+    with caplog.at_level(logging.INFO, logger="app"):
+        await resend.send(PRIVATE, idempotency_key="test-digest-1")
+    assert "Email send attempt: to=a***@example.org ref=test-digest-1" in caplog.text
+    assert "Email accepted by Resend (not a delivery confirmation): to=a***@example.org ref=test-digest-1 id=msg_abc" in caplog.text
+    assert "delivered" not in caplog.text.lower().replace("not a delivery confirmation", "")
+    _no_private_data(caplog.text)
+
+
+@pytest.mark.anyio
+async def test_failed_send_is_logged_with_details(caplog):
+    resend, _ = sender(lambda r: httpx.Response(403, json={"name": "validation_error", "message": "ada.lovelace@example.org"}))
+    with caplog.at_level(logging.INFO, logger="app"), pytest.raises(EmailRejectedError):
+        await resend.send(PRIVATE, idempotency_key="test-digest-2")
+    assert "Resend error: status=403 name=validation_error" in caplog.text
+    assert ("Email send failed: to=a***@example.org ref=test-digest-2 code=resend_403 retryable=False "
+            "outcome_unknown=False") in caplog.text
+    assert "accepted" not in caplog.text
+    _no_private_data(caplog.text)
+
+
+@pytest.mark.anyio
+async def test_timeout_is_logged_as_unknown_outcome(caplog):
+    def timeout(request):
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    with caplog.at_level(logging.INFO, logger="app"), pytest.raises(EmailTimeoutError):
+        await sender(timeout)[0].send(PRIVATE, idempotency_key="k3")
+    assert "code=timeout retryable=True outcome_unknown=True" in caplog.text
+    _no_private_data(caplog.text)
+
+
+@pytest.mark.anyio
+async def test_missing_key_is_logged_as_a_failure(caplog):
+    resend, requests = sender(lambda r: httpx.Response(200, json={"id": "x"}), resend_api_key=None)
+    with caplog.at_level(logging.INFO, logger="app"), pytest.raises(EmailNotConfiguredError):
+        await resend.send(PRIVATE, idempotency_key="k4")
+    assert "code=email_not_configured" in caplog.text and requests == []
+
+
+@pytest.mark.parametrize(("address", "masked"), [("ada@example.org", "a***@example.org"), ("", "-"), ("nope", "-")])
+def test_mask_email(address, masked):
+    from app.services.email import mask_email
+
+    assert mask_email(address) == masked
+
+
+def test_app_info_logs_are_shown_in_the_backend_terminal():
+    import app.main  # noqa: F401 - installs the handler
+
+    app_logger = logging.getLogger("app")
+    assert app_logger.level == logging.INFO and app_logger.handlers
+
+
+# ---------------------------------------------------------------- "Visit Medstract" footer
+
+
+def test_footer_links_to_the_configured_app_in_test_and_scheduled_emails():
+    from app.services.digest_render import SCHEDULED_NOTICE
+
+    for notice in (TEST_NOTICE, SCHEDULED_NOTICE):
+        html = render_html(digest(), notice, app_url=APP_URL)
+        footer = html[html.index("border-top:1px solid #e2e8f0"):]  # the divider starts the footer
+        assert "Explore more research with Medstract." in footer
+        assert '<a href="https://medstract.example/" style="color:#0f766e;font-weight:600;">Visit Medstract</a>' in footer
+        assert "Sent by Medstract on Oct 25, 2026 at 00:00 UTC. Research digests from PubMed." in footer
+        text = render_text(digest(), notice, app_url=APP_URL)
+        assert "Explore more research with Medstract.\nVisit Medstract: https://medstract.example/\n" in text
+
+
+def test_footer_link_is_an_absolute_url_built_from_the_setting():
+    for configured, expected in [
+        ("https://medstract.example/", "https://medstract.example/"),  # no doubled slash
+        ("https://app.example/medstract", "https://app.example/medstract/"),  # a sub-path is kept
+        ("http://localhost:3000", "http://localhost:3000/"),  # local development
+    ]:
+        assert f'href="{expected}"' in render_html(digest(), app_url=configured)
+        assert f"Visit Medstract: {expected}" in render_text(digest(), app_url=configured)
+
+
+def test_footer_without_an_absolute_app_url_shows_no_link():
+    for configured in ("", "medstract.example", "/home", "javascript:alert(1)"):
+        html = render_html(digest(), app_url=configured)
+        assert "Visit Medstract" in html and "Visit Medstract</a>" not in html and "javascript:" not in html
+        assert "Visit Medstract:" not in render_text(digest(), app_url=configured)
+
+
+def test_footer_url_is_escaped():
+    html = render_html(digest(), app_url='https://medstract.example/"><script>')
+    assert "<script>" not in html and "&quot;&gt;&lt;script&gt;" in html
+
+
+def test_each_email_ends_differently_so_gmail_does_not_hide_the_footer():
+    from datetime import timedelta, timezone
+
+    first = digest()
+    later = first.model_copy(update={"generated_at": first.generated_at + timedelta(hours=1, minutes=5)})
+    assert render_text(first, app_url=APP_URL).splitlines()[-1] != render_text(later, app_url=APP_URL).splitlines()[-1]
+    assert "Sent by Medstract on Oct 25, 2026 at 01:05 UTC." in render_html(later, app_url=APP_URL)
+    # Shown in UTC whatever time zone the timestamp carries.
+    eastern = first.model_copy(update={"generated_at": datetime(2026, 10, 24, 20, 30, tzinfo=timezone(timedelta(hours=-4)))})
+    assert "on Oct 25, 2026 at 00:30 UTC." in render_text(eastern, app_url=APP_URL)

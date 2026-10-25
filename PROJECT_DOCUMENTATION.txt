@@ -221,7 +221,7 @@ Healthcare Research/
         ranking.py        keyword-overlap relevance score
         dedup.py          PMID -> DOI -> normalized-title deduplication
         dates.py          partial-date parsing, period maths, date filtering
-        filters.py        allowlisted article-type [pt] and language [la] terms
+        filters.py        allowlisted article-type [pt] terms
         text.py           text, title and DOI normalization (normalize_title is
                           also the subscription topic rule)
         gemini.py         Gemini adapter; the only module that imports google-genai
@@ -427,12 +427,13 @@ Healthcare Research/
       review, systematic_review, meta_analysis, randomized_controlled_trial,
       clinical_trial, observational_study, case_reports, comparative_study,
       guideline, practice_guideline
-  - Language (repeatable), sent to PubMed as [la] terms:
-      english, spanish, french, german, chinese, japanese, italian,
-      portuguese, russian
   - Only allowlisted values are accepted; anything else is 422.
-  - Several values of one filter are combined with OR; different filters with
-    AND; the user's query is wrapped in parentheses.
+  - Several article types are combined with OR, then AND'ed with the query;
+    the user's query is wrapped in parentheses.
+  - The language filter ([la]) was removed [UNCOMMITTED]: the UI no longer
+    offers it, the API ignores a language= parameter, and saved searches stored
+    with a "languages" key still load (the key is ignored). Papers still show
+    their language (PubMed metadata) on the card.
 
 4.4 Reading (summary) level  [IMPLEMENTED]
   - High School / College / PhD selector in the UI. Values: high_school,
@@ -868,11 +869,10 @@ GET /api/search  (public: no login, no rate limit)
     end_date         optional: same formats
     period           all (default) | week | month
     article_type     repeatable, allowlist in Section 4.3
-    language         repeatable, allowlist in Section 4.3
     include_undated  bool, default false
   200  SearchResponse:
     query, total_results, returned, start_date, end_date (effective,
-    YYYY-MM-DD or null), period, article_types, languages, pubmed_query,
+    YYYY-MM-DD or null), period, article_types, pubmed_query,
     duplicates_removed, excluded_by_date, warnings[], papers[Paper]
   Paper fields:
     pmid, title, abstract|null, authors[{name, affiliation|null}],
@@ -888,7 +888,7 @@ GET /api/search  (public: no login, no rate limit)
          response. Please try again." on branch)
     504  PubMed timeout
   Example:
-    curl "http://localhost:8010/api/search?q=metformin%20breast%20cancer&max_results=5&period=month&article_type=review&language=english"
+    curl "http://localhost:8010/api/search?q=metformin%20breast%20cancer&max_results=5&period=month&article_type=review"
 
 ----------------------------------------------------------------------------
 POST /api/papers/{pmid}/analyze
@@ -966,7 +966,8 @@ GET /api/saved-searches
 POST /api/saved-searches (CSRF)
   Body: {"name"?: up to 120 chars, "query": 2-500 chars,
          "filters"?: {period, start_date, end_date, include_undated,
-                      article_types[], languages[], max_results 1-100}}
+                      article_types[], max_results 1-100}}
+        (a legacy "languages" key is accepted and ignored)
   201  SavedSearchOut {id (UUID), name, query, filters, created_at}
   401;  409 limit of 100 reached;  422
 
@@ -1144,7 +1145,7 @@ backend/.env (names from app/config.py; defaults are the code defaults)
   RESEND_API_KEY      SECRET     required to send; use a "Sending access" key
   RESEND_API_URL                 optional  https://api.resend.com
   EMAIL_ENABLED                  optional  false. Master switch for sending
-  EMAIL_FROM                     optional  Healthcare Research Agent
+  EMAIL_FROM                     optional  Medstract
                                  <onboarding@resend.dev> (Resend's test sender;
                                  it only delivers to the Resend account owner)
   EMAIL_TEST_RECIPIENTS          optional  "" . Comma-separated allowlist

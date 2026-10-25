@@ -52,10 +52,10 @@ export function SubscribeBell({ topic, readingLevel, variant = "hero", disabled 
         aria-haspopup="dialog"
         aria-label={label}
         title={label}
-        className={`bell-trigger inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium transition focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:outline-none disabled:opacity-50 ${
+        className={`bell-trigger inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium transition focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none disabled:opacity-50 ${
           subscribed
-            ? "text-teal-800 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950"
-            : "text-slate-600 hover:bg-slate-100 hover:text-teal-800 dark:text-slate-300 dark:hover:bg-slate-800"
+            ? "text-brand-800 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-950"
+            : "text-navy-600 hover:bg-navy-100 hover:text-brand-800 dark:text-navy-300 dark:hover:bg-navy-800"
         }`}
       >
         {bell}
@@ -72,10 +72,10 @@ export function SubscribeBell({ topic, readingLevel, variant = "hero", disabled 
       aria-haspopup="dialog"
       aria-label={label}
       title={label}
-      className={`bell-trigger grid size-11 shrink-0 place-items-center rounded-xl border transition focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50 ${
+      className={`bell-trigger grid size-11 shrink-0 place-items-center rounded-xl border transition focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50 ${
         subscribed
-          ? "border-teal-700 bg-teal-50 text-teal-800 hover:bg-teal-100 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-200 dark:hover:bg-teal-900"
-          : "border-slate-300 bg-white text-slate-600 hover:border-teal-600 hover:text-teal-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-teal-300"
+          ? "border-brand-700 bg-brand-50 text-brand-800 hover:bg-brand-100 dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200 dark:hover:bg-brand-900"
+          : "border-navy-300 bg-white text-navy-600 hover:border-brand-600 hover:text-brand-800 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-300 dark:hover:text-brand-300"
       }`}
     >
       {bell}

@@ -79,7 +79,7 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
   const levelChanged = state.status === "success" && state.analysis.summary_level !== summaryLevel;
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+    <div className="mt-4 border-t border-navy-100 pt-4 dark:border-navy-800">
       <div className="flex flex-wrap items-center gap-3">
         {/* The error alert below has its own retry button. */}
         {(state.status === "idle" || isLoading || levelChanged) && (
@@ -88,7 +88,7 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
             onClick={run}
             disabled={isLoading || outOfAnalyses}
             aria-describedby={`${baseId}-hint`}
-            className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? (
               <span
@@ -113,12 +113,12 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
             aria-controls={reportId}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 transition hover:border-violet-600 hover:text-violet-800 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:outline-none dark:border-slate-700 dark:text-slate-200 dark:hover:text-violet-300"
+            className="rounded-lg border border-navy-300 px-4 py-2 text-sm font-medium text-navy-800 transition hover:border-brand-600 hover:text-brand-800 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:outline-none dark:border-navy-700 dark:text-navy-200 dark:hover:text-brand-300"
           >
             {expanded ? "Hide AI analysis" : "Show AI analysis"}
           </button>
         )}
-        <p id={`${baseId}-hint`} className="text-xs text-slate-500 dark:text-slate-400">
+        <p id={`${baseId}-hint`} className="text-xs text-navy-500 dark:text-navy-400">
           {isLoading
             ? `Gemini is reading the abstract at ${labelFor(SUMMARY_LEVEL_OPTIONS, state.level)} level. This can take up to a minute.`
             : !signedIn
@@ -150,7 +150,7 @@ export function PaperAnalysisPanel({ pmid, summaryLevel }: PaperAnalysisPanelPro
         <div
           id={reportId}
           hidden={!expanded}
-          className="mt-4 rounded-xl border border-violet-100 bg-violet-50/40 p-4 sm:p-5 dark:border-violet-950 dark:bg-violet-950/20"
+          className="mt-4 rounded-xl border border-brand-100 bg-brand-50/40 p-4 sm:p-5 dark:border-brand-950 dark:bg-brand-950/20"
         >
           <AnalysisReport analysis={state.analysis} headingId={`${baseId}-heading`} />
         </div>

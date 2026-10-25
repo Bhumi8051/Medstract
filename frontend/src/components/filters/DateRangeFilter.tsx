@@ -45,10 +45,10 @@ export function DateRangeFilter({
 
   return (
     <form onSubmit={handleSubmit} noValidate aria-labelledby={`${baseId}-legend`}>
-      <p id={`${baseId}-legend`} className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+      <p id={`${baseId}-legend`} className="text-sm font-semibold text-navy-900 dark:text-navy-100">
         Publication date
       </p>
-      <p id={ids.hint} className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+      <p id={ids.hint} className="mt-0.5 text-xs text-navy-500 dark:text-navy-400">
         A year (2020), month (2020-03) or day (2020-03-15).
       </p>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -59,7 +59,7 @@ export function DateRangeFilter({
           ] as const
         ).map(([key, label, value, setValue]) => (
           <div key={key}>
-            <label htmlFor={ids[key]} className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor={ids[key]} className="block text-xs font-medium text-navy-700 dark:text-navy-300">
               {label}
             </label>
             <input
@@ -74,7 +74,7 @@ export function DateRangeFilter({
               }}
               aria-invalid={Boolean(errors[key])}
               aria-describedby={errors[key] ? `${ids[key]}-error` : ids.hint}
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="mt-1 w-full rounded-md border border-navy-300 bg-white px-2 py-1.5 text-sm text-navy-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30 focus:outline-none aria-invalid:border-red-500 dark:border-navy-700 dark:bg-navy-950 dark:text-navy-100"
             />
             {errors[key] && (
               <p id={`${ids[key]}-error`} className="mt-1 text-xs text-red-700 dark:text-red-400">
@@ -87,7 +87,7 @@ export function DateRangeFilter({
       <button
         type="submit"
         disabled={!isDirty}
-        className="mt-2 w-full rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+        className="mt-2 w-full rounded-md bg-navy-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-navy-700 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:bg-navy-100 dark:text-navy-900 dark:hover:bg-white"
       >
         Apply date range
       </button>
@@ -99,11 +99,11 @@ export function DateRangeFilter({
           checked={includeUndated}
           disabled={!hasRange}
           onChange={(e) => onIncludeUndatedChange(e.target.checked)}
-          className="mt-0.5 size-4 rounded border-slate-300 accent-teal-700 disabled:opacity-50"
+          className="mt-0.5 size-4 rounded border-navy-300 accent-brand-700 disabled:opacity-50"
         />
         <label
           htmlFor={ids.undated}
-          className={`text-xs ${hasRange ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}
+          className={`text-xs ${hasRange ? "text-navy-700 dark:text-navy-300" : "text-navy-400 dark:text-navy-500"}`}
         >
           Keep papers whose date is missing or incomplete in PubMed (only with a custom range)
         </label>

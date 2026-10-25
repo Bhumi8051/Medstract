@@ -8,6 +8,7 @@ the recipient address or the provider's free-text message).
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -86,12 +87,48 @@ class EmailSender(Protocol):
     async def send(self, message: EmailMessage, *, idempotency_key: str) -> SentEmail: ...
 
 
+def mask_email(address: str | None) -> str:
+    """"ada@example.org" -> "a***@example.org", for logs. Never log full addresses."""
+    if not address or "@" not in address:
+        return "-"
+    name, domain = address.split("@", 1)
+    return f"{name[:1]}***@{domain}"
+
+
 class ResendEmailSender:
     def __init__(self, settings: Settings, http_client: httpx.AsyncClient) -> None:
         self._settings = settings
         self._http = http_client
 
     async def send(self, message: EmailMessage, *, idempotency_key: str) -> SentEmail:
+        """Send one email, logging the attempt and its outcome.
+
+        Logs contain the masked recipient, the idempotency key (as "ref", because the
+        log redactor masks anything written as "key="), Resend's message id
+        or error details and the duration. Never the API key, the full address, the
+        subject (it names research topics) or the body. "Accepted" means Resend
+        took the email for delivery; delivery itself is only visible in Resend
+        (dashboard or webhooks), not here.
+        """
+        recipient = mask_email(message.to)
+        started = time.monotonic()
+        logger.info("Email send attempt: to=%s ref=%s", recipient, idempotency_key)
+        try:
+            sent = await self._send(message, idempotency_key=idempotency_key)
+        except EmailError as exc:
+            logger.warning(
+                "Email send failed: to=%s ref=%s code=%s retryable=%s outcome_unknown=%s after %dms",
+                recipient, idempotency_key, exc.code, exc.retryable, exc.outcome_unknown,
+                (time.monotonic() - started) * 1000,
+            )
+            raise
+        logger.info(
+            "Email accepted by Resend (not a delivery confirmation): to=%s ref=%s id=%s after %dms",
+            recipient, idempotency_key, sent.provider_message_id, (time.monotonic() - started) * 1000,
+        )
+        return sent
+
+    async def _send(self, message: EmailMessage, *, idempotency_key: str) -> SentEmail:
         api_key = self._settings.resend_key_value
         if not api_key:
             raise EmailNotConfiguredError(

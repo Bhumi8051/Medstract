@@ -10,7 +10,11 @@ export type StatusTone = "success" | "neutral" | "info" | "warning" | "danger";
 export const DELIVERY_STATUS: Record<DeliveryStatus, { label: string; tone: StatusTone; hint: string }> = {
   pending: { label: "Queued", tone: "info", hint: "Waiting to be sent, or to be retried." },
   sending: { label: "Sending", tone: "info", hint: "Being sent right now." },
-  sent: { label: "Sent", tone: "success", hint: "The email service accepted it." },
+  sent: {
+    label: "Accepted",
+    tone: "success",
+    hint: "The email service accepted it for delivery (delivery itself isn't confirmed here).",
+  },
   dry_run: { label: "Dry run", tone: "neutral", hint: "Built for testing; deliberately not sent." },
   skipped_no_new: { label: "Skipped: nothing new", tone: "neutral", hint: "No new papers, and you chose not to get empty digests." },
   skipped_missed: {
@@ -72,8 +76,8 @@ export function formatInZone(iso: string, timeZone: string): string {
 }
 
 export const TONE_CLASSES: Record<StatusTone, string> = {
-  success: "bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200",
-  neutral: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  success: "bg-brand-100 text-brand-900 dark:bg-brand-950 dark:text-brand-200",
+  neutral: "bg-navy-100 text-navy-700 dark:bg-navy-800 dark:text-navy-300",
   info: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
   warning: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
   danger: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",

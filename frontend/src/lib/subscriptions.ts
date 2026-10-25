@@ -135,19 +135,28 @@ export function validateSettings(settings: SubscriptionSettings, knownTimeZones:
   if (settings.frequency === "monthly" && !(settings.monthDay >= 1 && settings.monthDay <= 28)) {
     errors.monthDay = "Choose a day from 1 to 28.";
   }
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(settings.deliveryTime)) {
-    errors.deliveryTime = "Choose a delivery time.";
+  if (!TIME_24H.test(settings.deliveryTime)) {
+    errors.deliveryTime = "Enter a time like 7:30 PM (hours 1–12, minutes 00–59, then AM or PM).";
   }
   if (!knownTimeZones.includes(settings.timeZone)) errors.timeZone = "Choose a time zone from the list.";
   return errors;
 }
 
-/** Delivery times every 30 minutes, as "HH:MM" values with "8:00 AM"-style labels. */
-export function deliveryTimeOptions(): Option<string>[] {
-  return Array.from({ length: 48 }, (_, i) => {
-    const value = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
-    return { value, label: formatTime(value) };
-  });
+// The backend's delivery_time format: 24-hour "HH:MM".
+const TIME_24H = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * A typed time -> "HH:MM", or null if it isn't valid. Accepts "7:30 PM", "7:30pm",
+ * "9 am" and "12:15 P.M." (AM/PM in any case). "12 AM" is midnight, "12 PM" is noon.
+ */
+export function parseTypedTime(text: string): string | null {
+  const match = /^\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?\s*$/i.exec(text);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2] ?? "0");
+  if (hour < 1 || hour > 12 || minute > 59) return null;
+  const hours24 = (hour % 12) + (match[3].toLowerCase() === "p" ? 12 : 0);
+  return `${String(hours24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 /** "08:00" -> "8:00 AM" */
@@ -174,7 +183,8 @@ export function describeSchedule(settings: SubscriptionSettings): string {
       : settings.frequency === "weekly"
         ? `Weekly on ${WEEKDAYS[settings.weekday]}`
         : `Monthly on the ${ordinal(settings.monthDay)}`;
-  return `${when} at ${formatTime(settings.deliveryTime)} (${settings.timeZone.replace(/_/g, " ")})`;
+  const at = TIME_24H.test(settings.deliveryTime) ? ` at ${formatTime(settings.deliveryTime)}` : "";
+  return `${when}${at} (${settings.timeZone.replace(/_/g, " ")})`;
 }
 
 /** UI settings -> API body. Days the frequency doesn't use are sent as null. */
